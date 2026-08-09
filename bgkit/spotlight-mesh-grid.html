@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<!--
+  SPOTLIGHT MESH GRID — soft mesh blobs drift over a faint structural grid;
+  one blob snaps sharply to follow the cursor like a spotlight while the
+  rest drift gently. Built for SaaS, product, and dashboard hero sections
+  that want "alive" without losing structure.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/spotlight-mesh-grid.html?color1=%235B8DEF&color2=%237C5CFF&color3=%2334D1BF&bg=%23090B14&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, mesh color A (spotlight) default #5B8DEF
+    color2     hex, mesh color B             default #7C5CFF
+    color3     hex, mesh color C             default #34D1BF
+    bg         hex, base background color    default #090B14
+    gridsize   int px, grid cell size        default 46
+    speed      float multiplier for motion   default 1
+    text       optional hero text overlay    default "" (none)
+    textcolor  hex, hero text color          default #FFFFFF
+
+  PERF: 3 pre-built radial sprites via drawImage; grid is a single CSS
+  repeating-linear-gradient background (GPU, zero JS cost). No per-pixel
+  canvas work, one shared CSS blur.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spotlight Mesh Grid Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#090B14; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  .grid-layer{
+    position:absolute; inset:0; z-index:0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size:var(--gridsize, 46px) var(--gridsize, 46px);
+  }
+  canvas{ position:absolute; inset:0; display:block; z-index:1; }
+  #view{ filter:blur(55px) saturate(1.15); transform:scale(1.15); mix-blend-mode:screen; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:3; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+  .vignette{
+    position:absolute; inset:0; z-index:2; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 50%, transparent 45%, var(--bg, #090B14) 100%);
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="grid-layer" id="gridLayer"></div>
+  <canvas id="view"></canvas>
+  <div class="vignette" id="vignette"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color1 = safeHex(getParam("color1", "#5B8DEF"), "#5B8DEF");
+  var color2 = safeHex(getParam("color2", "#7C5CFF"), "#7C5CFF");
+  var color3 = safeHex(getParam("color3", "#34D1BF"), "#34D1BF");
+  var bg = safeHex(getParam("bg", "#090B14"), "#090B14");
+  var gridSize = parseInt(getParam("gridsize", "46"), 10) || 46;
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.documentElement.style.setProperty("--bg", bg);
+  document.getElementById("gridLayer").style.setProperty("--gridsize", gridSize + "px");
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var colors = [color1, color2, color3].map(hexToRgb);
+
+  var view = document.getElementById("view");
+  var ctx = view.getContext("2d");
+  var W, H, DPR;
+  var points = [];
+  var sprites = [];
+  var mouse = { x:null, y:null, active:false };
+
+  function buildSprite(rgb, radius){
+    var d = radius * 2;
+    var s = document.createElement("canvas");
+    s.width = d; s.height = d;
+    var sc = s.getContext("2d");
+    var grad = sc.createRadialGradient(radius, radius, 0, radius, radius, radius);
+    grad.addColorStop(0, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.85)");
+    grad.addColorStop(0.55, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.4)");
+    grad.addColorStop(1, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0)");
+    sc.fillStyle = grad;
+    sc.fillRect(0, 0, d, d);
+    return s;
+  }
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    view.width = W * DPR;
+    view.height = H * DPR;
+    view.style.width = W + "px";
+    view.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var radius = Math.max(W, H) * 0.5;
+    sprites = colors.map(function(rgb){ return buildSprite(rgb, radius); });
+
+    var anchors = [
+      { ax:0.3, ay:0.4, follow:true },
+      { ax:0.75, ay:0.3, follow:false },
+      { ax:0.6, ay:0.75, follow:false }
+    ];
+    points = anchors.map(function(a, i){
+      return {
+        baseX: a.ax * W, baseY: a.ay * H,
+        x: a.ax * W, y: a.ay * H,
+        radius: radius,
+        phase: i * 1.9,
+        follow: a.follow,
+        driftX: 0.1 + Math.random()*0.05,
+        driftY: 0.09 + Math.random()*0.05
+      };
+    });
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var t = 0;
+
+  function step(){
+    if(!running) return;
+    if(!reduced) t += 0.006 * speed;
+
+    ctx.clearRect(0, 0, W, H);
+
+    for(var i=0;i<points.length;i++){
+      var p = points[i];
+      var wanderX = p.baseX + Math.sin(t*p.driftX + p.phase) * W * 0.1;
+      var wanderY = p.baseY + Math.cos(t*p.driftY + p.phase*1.2) * H * 0.1;
+
+      if(p.follow && mouse.active){
+        // sharp, responsive follow — the "spotlight" blob
+        p.x += (mouse.x - p.x) * 0.12;
+        p.y += (mouse.y - p.y) * 0.12;
+      } else {
+        p.x += (wanderX - p.x) * 0.05;
+        p.y += (wanderY - p.y) * 0.05;
+      }
+
+      var d2 = p.radius * 2;
+      ctx.drawImage(sprites[i], p.x - p.radius, p.y - p.radius, d2, d2);
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

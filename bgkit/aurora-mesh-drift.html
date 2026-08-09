@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<!--
+  AURORA MESH DRIFT — large, diffuse, cool-toned mesh blobs orbit slowly
+  and are magnetically pushed away from the cursor, like light bending
+  around a lens. Built for fintech, enterprise, and dark-mode dashboards
+  that want depth without noise.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/aurora-mesh-drift.html?color1=%2300D9C0&color2=%233B82F6&color3=%236366F1&bg=%23060A14&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, mesh color A            default #00D9C0
+    color2     hex, mesh color B            default #3B82F6
+    color3     hex, mesh color C            default #6366F1
+    bg         hex, base background color   default #060A14
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: 3 pre-built radial sprites blitted with drawImage, orbit positions
+  computed with cheap trig (no per-pixel work). Cursor repulsion is a
+  single vector calc per blob per frame.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aurora Mesh Drift Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#060A14; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  #view{ filter:blur(65px) saturate(1.2); transform:scale(1.16); }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+  .grain{
+    position:absolute; inset:0; opacity:0.04; pointer-events:none; z-index:1;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="view"></canvas>
+  <div class="grain"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color1 = safeHex(getParam("color1", "#00D9C0"), "#00D9C0");
+  var color2 = safeHex(getParam("color2", "#3B82F6"), "#3B82F6");
+  var color3 = safeHex(getParam("color3", "#6366F1"), "#6366F1");
+  var bg = safeHex(getParam("bg", "#060A14"), "#060A14");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var colors = [color1, color2, color3].map(hexToRgb);
+
+  var view = document.getElementById("view");
+  var ctx = view.getContext("2d");
+  var W, H, DPR, cx, cy;
+  var points = [];
+  var sprites = [];
+  var mouse = { x:null, y:null, active:false };
+
+  function buildSprite(rgb, radius){
+    var d = radius * 2;
+    var s = document.createElement("canvas");
+    s.width = d; s.height = d;
+    var sc = s.getContext("2d");
+    var grad = sc.createRadialGradient(radius, radius, 0, radius, radius, radius);
+    grad.addColorStop(0, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.75)");
+    grad.addColorStop(0.55, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.32)");
+    grad.addColorStop(1, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0)");
+    sc.fillStyle = grad;
+    sc.fillRect(0, 0, d, d);
+    return s;
+  }
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    view.width = W * DPR;
+    view.height = H * DPR;
+    view.style.width = W + "px";
+    view.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    cx = W/2; cy = H/2;
+
+    var radius = Math.max(W, H) * 0.62;
+    sprites = colors.map(function(rgb){ return buildSprite(rgb, radius); });
+
+    points = colors.map(function(_, i){
+      return {
+        orbitR: Math.min(W,H) * (0.22 + i*0.08),
+        angle: (i / colors.length) * Math.PI * 2,
+        angleSpeed: (0.06 + i*0.015) * (i % 2 === 0 ? 1 : -1),
+        x: cx, y: cy,
+        radius: radius,
+        pushX: 0, pushY: 0
+      };
+    });
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var t = 0;
+
+  function step(){
+    if(!running) return;
+    if(!reduced) t += 0.01 * speed;
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+
+    for(var i=0;i<points.length;i++){
+      var p = points[i];
+      var orbitX = cx + Math.cos(p.angle + t*p.angleSpeed) * p.orbitR;
+      var orbitY = cy + Math.sin(p.angle + t*p.angleSpeed*0.8) * p.orbitR;
+
+      var targetPushX = 0, targetPushY = 0;
+      if(mouse.active){
+        var dx = orbitX - mouse.x, dy = orbitY - mouse.y;
+        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        var repelR = Math.max(W, H) * 0.35;
+        if(dist < repelR){
+          var force = (1 - dist/repelR) * 90;
+          targetPushX = (dx/dist) * force;
+          targetPushY = (dy/dist) * force;
+        }
+      }
+      p.pushX += (targetPushX - p.pushX) * 0.06;
+      p.pushY += (targetPushY - p.pushY) * 0.06;
+
+      p.x = orbitX + p.pushX;
+      p.y = orbitY + p.pushY;
+
+      var d2 = p.radius * 2;
+      ctx.drawImage(sprites[i], p.x - p.radius, p.y - p.radius, d2, d2);
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<!--
+  BLOOM MESH BREATHE — warm mesh blobs breathe in sync (slow scale pulse);
+  clicking or tapping sends a "bloom" ripple that scales all blobs outward
+  briefly before settling. Built for wellness, health, and calm-brand
+  sites where the interaction should feel reassuring, not flashy.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/bloom-mesh-breathe.html?color1=%23FFB899&color2=%23FF8FA3&color3=%23FFD98E&bg=%23FFF7F0&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, mesh color A            default #FFB899
+    color2     hex, mesh color B            default #FF8FA3
+    color3     hex, mesh color C            default #FFD98E
+    bg         hex, base background color   default #FFF7F0
+    speed      float multiplier for breathe default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #3A2A22
+
+  PERF: 3 pre-built radial sprites via drawImage with a scale transform for
+  breathing (canvas transform, not per-pixel). Click bloom is a single
+  decaying scalar, no particle spawn.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bloom Mesh Breathe Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#FFF7F0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; cursor:pointer; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  #view{ filter:blur(60px) saturate(1.15); transform:scale(1.16); }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:500;
+    letter-spacing:-0.01em;
+    text-align:center;
+    padding:0 1rem;
+    opacity:0;
+    animation:reveal 1.6s ease forwards 0.3s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(10px); } }
+  .hint{
+    position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+    color:rgba(58,42,34,0.35); font-size:12px; letter-spacing:0.08em;
+    text-transform:uppercase; pointer-events:none;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;
+    z-index:2;
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="view"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+  <div class="hint" id="hint">tap to bloom</div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color1 = safeHex(getParam("color1", "#FFB899"), "#FFB899");
+  var color2 = safeHex(getParam("color2", "#FF8FA3"), "#FF8FA3");
+  var color3 = safeHex(getParam("color3", "#FFD98E"), "#FFD98E");
+  var bg = safeHex(getParam("bg", "#FFF7F0"), "#FFF7F0");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#3A2A22"), "#3A2A22");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  document.getElementById("hint").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var colors = [color1, color2, color3].map(hexToRgb);
+
+  var view = document.getElementById("view");
+  var ctx = view.getContext("2d");
+  var W, H, DPR;
+  var points = [];
+  var sprites = [];
+  var bloom = 0; // decaying scalar 0..1
+
+  function buildSprite(rgb, radius){
+    var d = radius * 2;
+    var s = document.createElement("canvas");
+    s.width = d; s.height = d;
+    var sc = s.getContext("2d");
+    var grad = sc.createRadialGradient(radius, radius, 0, radius, radius, radius);
+    grad.addColorStop(0, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.85)");
+    grad.addColorStop(0.55, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.42)");
+    grad.addColorStop(1, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0)");
+    sc.fillStyle = grad;
+    sc.fillRect(0, 0, d, d);
+    return s;
+  }
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    view.width = W * DPR;
+    view.height = H * DPR;
+    view.style.width = W + "px";
+    view.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var radius = Math.max(W, H) * 0.5;
+    sprites = colors.map(function(rgb){ return buildSprite(rgb, radius); });
+
+    var anchors = [
+      { ax:0.3, ay:0.35 }, { ax:0.72, ay:0.3 }, { ax:0.5, ay:0.72 }
+    ];
+    points = anchors.map(function(a, i){
+      return {
+        baseX: a.ax * W, baseY: a.ay * H,
+        radius: radius,
+        phase: i * 2.4,
+        driftX: 0.05 + Math.random()*0.02,
+        driftY: 0.04 + Math.random()*0.02
+      };
+    });
+  }
+
+  function triggerBloom(){
+    bloom = 1;
+  }
+  window.addEventListener("pointerdown", triggerBloom);
+  window.addEventListener("keydown", function(e){ if(e.key === " " || e.key === "Enter") triggerBloom(); });
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var t = 0;
+
+  function step(){
+    if(!running) return;
+    if(!reduced) t += 0.006 * speed;
+
+    if(bloom > 0.001) bloom *= 0.96; else bloom = 0;
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "multiply";
+
+    for(var i=0;i<points.length;i++){
+      var p = points[i];
+      var breathe = reduced ? 1 : (1 + Math.sin(t*0.8 + p.phase) * 0.06);
+      var scale = breathe + bloom * 0.35;
+
+      var x = p.baseX + (reduced ? 0 : Math.sin(t*p.driftX + p.phase) * W * 0.05);
+      var y = p.baseY + (reduced ? 0 : Math.cos(t*p.driftY + p.phase*1.3) * H * 0.05);
+
+      var d2 = p.radius * 2 * scale;
+      ctx.drawImage(sprites[i], x - d2/2, y - d2/2, d2, d2);
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

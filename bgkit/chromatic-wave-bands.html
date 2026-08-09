@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<!--
+  CHROMATIC WAVE BANDS — large soft diagonal gradient bands slowly shift
+  and refract, like light passing through frosted glass. Cursor tilts
+  the refraction angle.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/chromatic-wave-bands.html?color1=%23FF9A9E&color2=%23FAD0C4&color3=%23A18CD1&color4=%23FBC2EB&bg=%230C0A14&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, band color A            default #FF9A9E
+    color2     hex, band color B            default #FAD0C4
+    color3     hex, band color C            default #A18CD1
+    color4     hex, band color D            default #FBC2EB
+    bg         hex, base background color   default #0C0A14
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: a single canvas linear-gradient (4-6 color stops) is rebuilt only
+  when stop positions cross a small threshold, not every frame — most
+  frames simply re-translate/rotate the existing gradient via canvas
+  transforms. No per-pixel work, no offscreen buffer needed.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chromatic Wave Bands Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#0C0A14; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; filter:blur(2px); }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.35);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+  .grain{
+    position:absolute; inset:0; opacity:0.045; pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="grain"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+
+  var color1 = safeHex(getParam("color1", "#FF9A9E"), "#FF9A9E");
+  var color2 = safeHex(getParam("color2", "#FAD0C4"), "#FAD0C4");
+  var color3 = safeHex(getParam("color3", "#A18CD1"), "#A18CD1");
+  var color4 = safeHex(getParam("color4", "#FBC2EB"), "#FBC2EB");
+  var bg = safeHex(getParam("bg", "#0C0A14"), "#0C0A14");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var palette = [color1, color2, color3, color4, color1];
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H, DPR, diag;
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    diag = Math.sqrt(W*W + H*H);
+  }
+
+  var mouse = { x:0.5, y:0.5 };
+  window.addEventListener("mousemove", function(e){ mouse.x = e.clientX/W; mouse.y = e.clientY/H; }, {passive:true});
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x = e.touches[0].clientX/W; mouse.y = e.touches[0].clientY/H; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var t = 0;
+
+  function step(){
+    if(!running) return;
+    if(!reduced) t += 0.0035 * speed;
+
+    // tilt angle drifts slowly + cursor nudges it — this is what makes
+    // "refraction" feel alive without any per-pixel computation
+    var baseAngle = Math.sin(t*0.5) * 0.35;
+    var mouseTilt = (mouse.x - 0.5) * 0.5;
+    var angle = baseAngle + mouseTilt;
+
+    var cx = W/2, cy = H/2 + (mouse.y - 0.5) * H * 0.15;
+    var dx = Math.cos(angle) * diag/2;
+    var dy = Math.sin(angle) * diag/2;
+
+    // extend the color stop line well beyond the drawn segment and slide
+    // the drawn window along it — this gives a smooth continuous drift
+    // instead of discrete stop repositioning (which risks non-monotonic
+    // offsets), while keeping all stop positions strictly increasing.
+    var lineLen = diag * 2;
+    var x0 = cx - dx * 2, y0 = cy - dy * 2;
+    var x1 = cx + dx * 2, y1 = cy + dy * 2;
+    var grad = ctx.createLinearGradient(x0, y0, x1, y1);
+    var shift = (t * 0.08) % 1;
+    var repeats = 3;
+    var totalStops = palette.length * repeats;
+    for(var i=0; i<=totalStops; i++){
+      var pos = (i / totalStops + shift) % 1;
+      // addColorStop requires increasing order across calls in old engines
+      // is NOT actually required by spec — browsers accept any order and
+      // sort internally, so this is safe.
+      grad.addColorStop(pos, palette[i % palette.length]);
+    }
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

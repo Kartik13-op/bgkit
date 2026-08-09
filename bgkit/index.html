@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>bgkit — embeddable HTML backgrounds</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Copy-paste animated backgrounds you can embed in any webpage with a single iframe. No build step, no dependencies.">
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --surface:#F5F5F7;
+    --surface-hover:#EDEDEF;
+    --line:#D2D2D7;
+    --ink:#1D1D1F;
+    --muted:#6E6E73;
+    --black:#000000;
+    --mono:ui-monospace, 'SF Mono', 'IBM Plex Mono', monospace;
+    --display:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif;
+    --radius-lg:22px;
+    --radius-md:14px;
+    --radius-sm:9px;
+    --ease:cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--display);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a{ color:inherit; }
+  ::selection{ background:var(--ink); color:#fff; }
+
+  /* ---------------- Header ---------------- */
+  header{
+    padding:clamp(3.5rem, 9vw, 7.5rem) clamp(1.5rem, 5vw, 3rem) clamp(2.5rem, 6vw, 4rem);
+    max-width:1160px;
+    margin:0 auto;
+    text-align:center;
+  }
+  .eyebrow{
+    font-size:0.8rem;
+    font-weight:600;
+    letter-spacing:0.01em;
+    color:var(--muted);
+    margin-bottom:1.1rem;
+  }
+  h1{
+    font-size:clamp(2.6rem, 6.4vw, 5rem);
+    font-weight:700;
+    letter-spacing:-0.03em;
+    line-height:1.04;
+    margin:0 auto 1.1rem;
+    max-width:16ch;
+  }
+  .lede{
+    font-size:clamp(1.05rem, 1.9vw, 1.3rem);
+    color:var(--muted);
+    max-width:44ch;
+    line-height:1.5;
+    margin:0 auto 2.25rem;
+    font-weight:400;
+  }
+  .lede code{
+    color:var(--ink);
+    background:var(--surface);
+    padding:0.12em 0.5em;
+    border-radius:6px;
+    font-family:var(--mono);
+    font-size:0.88em;
+  }
+  .header-cta{
+    display:flex;
+    flex-wrap:wrap;
+    gap:0.7rem;
+    align-items:center;
+    justify-content:center;
+  }
+  .btn{
+    font-family:var(--display);
+    font-size:0.95rem;
+    font-weight:500;
+    padding:0.75rem 1.4rem;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--bg);
+    color:var(--ink);
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-flex;
+    align-items:center;
+    gap:0.5rem;
+    transition:transform 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+  .btn:hover{ transform:translateY(-1px); border-color:#B8B8BD; }
+  .btn.primary{
+    background:var(--black);
+    color:#fff;
+    border-color:var(--black);
+    font-weight:600;
+  }
+  .btn.primary:hover{ background:#2B2B2E; }
+
+  /* ---------------- Toolbar ---------------- */
+  .toolbar{
+    position:sticky;
+    top:0;
+    z-index:20;
+    background:rgba(255,255,255,0.82);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid transparent;
+    transition:border-color 0.3s ease;
+  }
+  .toolbar.scrolled{ border-color:var(--line); }
+  .toolbar-inner{
+    max-width:1160px;
+    margin:0 auto;
+    padding:0.9rem clamp(1.5rem, 5vw, 3rem);
+    display:flex;
+    flex-wrap:wrap;
+    gap:0.5rem;
+    justify-content:center;
+  }
+  .tag-btn{
+    font-family:var(--display);
+    font-size:0.83rem;
+    font-weight:500;
+    padding:0.45rem 0.95rem;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--bg);
+    color:var(--muted);
+    cursor:pointer;
+    transition:all 0.2s var(--ease);
+  }
+  .tag-btn:hover{ color:var(--ink); border-color:#B8B8BD; }
+  .tag-btn.active{
+    color:#fff;
+    background:var(--black);
+    border-color:var(--black);
+  }
+
+  /* status strip */
+  .status-strip{
+    max-width:1160px;
+    margin:0 auto;
+    padding:0.6rem clamp(1.5rem, 5vw, 3rem) 0;
+    font-size:0.78rem;
+    color:var(--muted);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    gap:0.4rem;
+    text-align:center;
+  }
+  .status-strip.show{ display:flex; }
+  .status-strip .dot{ width:6px; height:6px; border-radius:50%; background:#E8A33D; flex-shrink:0; }
+
+  /* ---------------- Gallery grid ---------------- */
+  main{
+    max-width:1160px;
+    margin:0 auto;
+    padding:2.5rem clamp(1.5rem, 5vw, 3rem) 7rem;
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+    gap:1.5rem;
+  }
+
+  /* ---------------- Card (gallery state) ---------------- */
+  .card{
+    position:relative;
+    border-radius:var(--radius-lg);
+    overflow:hidden;
+    background:var(--surface);
+    cursor:pointer;
+    transition:transform 0.4s var(--ease), box-shadow 0.4s var(--ease);
+    opacity:0;
+    transform:translateY(16px);
+  }
+  .card.revealed{ opacity:1; transform:translateY(0); }
+  .card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 20px 45px -18px rgba(0,0,0,0.22);
+  }
+  .card.revealed:hover{ transform:translateY(-3px); }
+  .card:focus-visible{ outline:2px solid var(--black); outline-offset:3px; }
+
+  .card-preview{
+    position:relative;
+    width:100%;
+    aspect-ratio:4/3;
+    background:var(--card-tint, #0B0C10);
+    overflow:hidden;
+  }
+  .card-preview iframe{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    border:0;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity 0.5s ease;
+  }
+  .card-preview iframe.loaded{ opacity:1; }
+
+  /* static poster shown until hover/focus brings the loop alive */
+  .card-poster{
+    position:absolute;
+    inset:0;
+    z-index:2;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+  }
+  .card-poster svg{
+    width:34px; height:34px;
+    opacity:0.9;
+  }
+  .card-preview:not(.playing) .card-poster{ opacity:1; transition:opacity 0.25s ease; }
+  .card-preview.playing .card-poster{ opacity:0; transition:opacity 0.25s ease; }
+
+  .card-play-hint{
+    position:absolute;
+    bottom:12px; left:12px;
+    z-index:3;
+    font-size:0.68rem;
+    font-weight:600;
+    letter-spacing:0.02em;
+    color:#fff;
+    background:rgba(0,0,0,0.45);
+    backdrop-filter:blur(6px);
+    padding:0.28rem 0.6rem;
+    border-radius:999px;
+    opacity:0;
+    transform:translateY(4px);
+    transition:opacity 0.2s ease, transform 0.2s ease;
+  }
+  .card:hover .card-play-hint{ opacity:1; transform:translateY(0); }
+
+  .card-info{ padding:1.15rem 1.3rem 1.35rem; }
+  .card-title-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:0.75rem;
+  }
+  .card-title{
+    font-size:1.05rem;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  .card-expand-icon{
+    width:26px; height:26px;
+    border-radius:50%;
+    background:var(--bg);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    transition:transform 0.3s var(--ease), background 0.2s var(--ease);
+  }
+  .card:hover .card-expand-icon{ background:var(--black); }
+  .card:hover .card-expand-icon svg{ stroke:#fff; }
+  .card-expand-icon svg{ width:13px; height:13px; stroke:var(--ink); transition:stroke 0.2s var(--ease); }
+
+  .card-tags{ display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.55rem; }
+  .chip{
+    font-size:0.72rem;
+    font-weight:500;
+    color:var(--muted);
+    background:var(--bg);
+    padding:0.2rem 0.6rem;
+    border-radius:999px;
+  }
+
+  /* ---------------- Detail overlay ---------------- */
+  .overlay{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    display:none;
+    align-items:flex-start;
+    justify-content:center;
+    overflow-y:auto;
+    padding:clamp(1rem, 4vw, 3.5rem) 1rem;
+  }
+  .overlay.open{ display:flex; }
+  .overlay-backdrop{
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    opacity:0;
+    background:rgba(20,20,22,0.001);
+    transition:opacity 0.35s var(--ease), background 0.35s var(--ease);
+  }
+  .overlay.open .overlay-backdrop{
+    opacity:1;
+    background:rgba(20,20,22,0.4);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+  }
+
+  .detail{
+    position:relative;
+    width:100%;
+    max-width:1280px;
+    background:var(--bg);
+    border-radius:28px;
+    overflow:hidden;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,0.45);
+    transform:translateY(24px) scale(0.97);
+    opacity:0;
+    transition:transform 0.4s var(--ease), opacity 0.35s var(--ease);
+  }
+  .overlay.open .detail{ transform:translateY(0) scale(1); opacity:1; }
+
+  .detail-close{
+    position:absolute;
+    top:18px; right:18px;
+    z-index:5;
+    width:36px; height:36px;
+    border-radius:50%;
+    border:none;
+    background:rgba(255,255,255,0.9);
+    backdrop-filter:blur(8px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    box-shadow:0 2px 10px rgba(0,0,0,0.15);
+    transition:background 0.2s ease, transform 0.2s ease;
+  }
+  .detail-close:hover{ background:#fff; transform:scale(1.06); }
+  .detail-close svg{ width:14px; height:14px; stroke:var(--ink); }
+
+  .detail-preview{
+    position:relative;
+    width:100%;
+    height:clamp(420px, 64vh, 760px);
+    background:#000;
+  }
+  .detail-preview iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .preview-refresh-btn{
+    position:absolute;
+    top:18px;
+    left:18px;
+    z-index:4;
+    border:1px solid rgba(255,255,255,0.32);
+    border-radius:999px;
+    padding:0.65rem 0.95rem;
+    background:rgba(15,15,18,0.72);
+    color:#fff;
+    font:600 0.78rem var(--display);
+    cursor:pointer;
+    backdrop-filter:blur(10px);
+    box-shadow:0 5px 18px rgba(0,0,0,0.22);
+    transition:background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+  .preview-refresh-btn:hover{ background:rgba(15,15,18,0.92); transform:translateY(-1px); }
+  .preview-refresh-btn.pending{ border-color:#F0A64A; color:#FFD39A; }
+
+  .detail-body{ padding:clamp(1.5rem, 4vw, 2.5rem); }
+  .detail-title{
+    font-size:clamp(1.5rem, 3vw, 2rem);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    margin:0 0 0.4rem;
+  }
+  .detail-tags{ display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.9rem; }
+  .detail-desc{
+    color:var(--muted);
+    font-size:1rem;
+    line-height:1.6;
+    max-width:60ch;
+    margin:0 0 2rem;
+  }
+  .section-label{
+    font-size:0.75rem;
+    font-weight:600;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 0.9rem;
+  }
+
+  .controls{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+    gap:1rem;
+    margin-bottom:2rem;
+  }
+  .field{
+    display:flex;
+    flex-direction:column;
+    gap:0.45rem;
+    background:var(--surface);
+    padding:0.85rem 0.95rem;
+    border-radius:var(--radius-md);
+  }
+  .field label{ font-size:0.75rem; font-weight:600; color:var(--muted); }
+  .field .row{ display:flex; align-items:center; gap:0.55rem; }
+  .field input[type="color"]{
+    -webkit-appearance:none; appearance:none;
+    width:32px; height:32px; padding:0;
+    border-radius:8px; border:1px solid var(--line);
+    background:none; cursor:pointer; flex-shrink:0;
+  }
+  .field input[type="color"]::-webkit-color-swatch-wrapper{ padding:2px; }
+  .field input[type="color"]::-webkit-color-swatch{ border-radius:6px; border:none; }
+  .field input[type="text"]{
+    flex:1;
+    font-family:var(--display);
+    font-size:0.88rem;
+    background:var(--bg);
+    border:1px solid var(--line);
+    color:var(--ink);
+    padding:0.5rem 0.65rem;
+    border-radius:8px;
+    min-width:0;
+  }
+  .field input[type="text"]:focus,
+  .field input[type="range"]:focus{ outline:2px solid var(--black); outline-offset:2px; }
+  .field input[type="range"]{ width:100%; accent-color:var(--black); }
+  .field .val{
+    font-family:var(--mono);
+    font-size:0.75rem;
+    color:var(--muted);
+    min-width:2.4em;
+    text-align:right;
+  }
+
+  .urlbar{
+    display:flex;
+    align-items:stretch;
+    border:1px solid var(--line);
+    border-radius:var(--radius-md);
+    overflow:hidden;
+    background:var(--surface);
+    margin-bottom:1rem;
+  }
+  .urlbar input{
+    flex:1; min-width:0;
+    background:transparent; border:0;
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:0.82rem;
+    padding:0.85rem 1rem;
+  }
+  .urlbar input:focus{ outline:none; }
+  .urlbar button{
+    font-family:var(--display);
+    font-size:0.85rem;
+    font-weight:600;
+    padding:0 1.3rem;
+    border:0;
+    background:var(--black);
+    color:#fff;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:background 0.2s ease;
+  }
+  .urlbar button:hover{ background:#2B2B2E; }
+  .urlbar button.copied{ background:#1DB954; }
+
+  .code-toggle{ margin-top:0; }
+  .code-toggle summary{
+    font-size:0.85rem;
+    font-weight:500;
+    color:var(--muted);
+    cursor:pointer;
+    list-style:none;
+    padding:0.4rem 0;
+  }
+  .code-toggle summary::-webkit-details-marker{ display:none; }
+  .code-toggle summary::before{ content:"› "; font-weight:700; }
+  .code-toggle[open] summary::before{ content:"⌄ "; }
+  .code-toggle pre{
+    margin:0.6rem 0 0;
+    background:var(--surface);
+    border-radius:var(--radius-md);
+    padding:1rem 1.1rem;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:#3A3A3E;
+    overflow-x:auto;
+    white-space:pre-wrap;
+    word-break:break-all;
+  }
+  .copy-code-btn{ margin-top:0.75rem; }
+
+  footer{
+    max-width:1160px;
+    margin:0 auto;
+    padding:2.5rem clamp(1.5rem, 5vw, 3rem) 4rem;
+    border-top:1px solid var(--line);
+    color:var(--muted);
+    font-size:0.85rem;
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:1rem;
+  }
+  footer a{ color:var(--ink); text-decoration:none; font-weight:500; }
+  footer a:hover{ text-decoration:underline; }
+
+  @media (max-width:640px){
+    .detail{ border-radius:20px; }
+    .detail-preview{ height:56vh; min-height:320px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .card{ transition:none; opacity:1; transform:none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">bgkit</div>
+  <h1>Backgrounds you embed, not install.</h1>
+  <p class="lede">
+    Standalone HTML files, each a complete animated background.
+    Drop an <code>&lt;iframe&gt;</code> behind your content — no build step, no dependencies.
+  </p>
+  <div class="header-cta">
+    <a class="btn primary" href="#gallery">Browse the gallery</a>
+    <a class="btn" href="https://github.com/Kartik13-op/bgkit" target="_blank" rel="noopener">View on GitHub</a>
+  </div>
+</header>
+
+<div class="toolbar" id="toolbarWrap">
+  <nav class="toolbar-inner" id="toolbar" aria-label="Filter by tag"></nav>
+</div>
+<div class="status-strip" id="statusStrip"><span class="dot"></span><span id="statusText"></span></div>
+
+<main id="gallery"></main>
+
+<div class="overlay" id="overlay">
+  <div class="overlay-backdrop" id="overlayBackdrop"></div>
+  <div class="detail" id="detail" role="dialog" aria-modal="true"></div>
+</div>
+
+<footer>
+  <span>bgkit — MIT licensed. Fork it, rename it, ship it.</span>
+  <a href="https://github.com/Kartik13-op/bgkit" target="_blank" rel="noopener">github.com/Kartik13-op/bgkit</a>
+</footer>
+
+<script>
+/* =====================================================================
+   SOURCE RESOLUTION — GitHub Pages first, local /backgrounds fallback
+   Only one live probe is done, cached for the whole session, so every
+   card doesn't independently retry a dead URL.
+   =====================================================================
+*/
+const GITHUB_BASE = "https://kartik13-op.github.io/bgkit/";
+const LOCAL_BASE = new URL("./", window.location.href).href;
+
+let RESOLVED_BASE = null;
+const statusStrip = document.getElementById("statusStrip");
+const statusText = document.getElementById("statusText");
+
+function probeBase(url, file, timeoutMs){
+  return new Promise((resolve) => {
+    const done = (ok) => { clearTimeout(timer); resolve(ok); };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    fetch(url + file, { method: "HEAD", mode: "cors" })
+      .then(r => done(r.ok))
+      .catch(() => done(false));
+  });
+}
+
+async function resolveBase(sampleFile){
+  if(window.location.protocol === "file:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"){
+    RESOLVED_BASE = LOCAL_BASE;
+    return RESOLVED_BASE;
+  }
+  // If we're already being served from github.io, trust it directly — no probe needed.
+  if(window.location.hostname.endsWith("github.io")){
+    RESOLVED_BASE = GITHUB_BASE;
+    return RESOLVED_BASE;
+  }
+  const ghOk = await probeBase(GITHUB_BASE, sampleFile, 2500);
+  if(ghOk){
+    RESOLVED_BASE = GITHUB_BASE;
+  } else {
+    RESOLVED_BASE = LOCAL_BASE;
+    statusText.textContent = "GitHub Pages unreachable — serving backgrounds from this local folder.";
+    statusStrip.classList.add("show");
+  }
+  return RESOLVED_BASE;
+}
+
+/* =====================================================================
+   MANIFEST
+   ===================================================================== */
+const BACKGROUNDS = [
+  { slug:"aurora-mesh", file:"aurora-mesh.html", name:"Aurora Mesh",
+    desc:"Three soft gradient blobs drifting and blending in screen mode, with a light parallax tilt on cursor move.",
+    tags:["gradient","ambient"], tint:"#241A3D",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#6E56CF" },
+      { key:"color2", label:"Color 2", type:"color", default:"#E0577B" },
+      { key:"color3", label:"Color 3", type:"color", default:"#23C4F5" },
+      { key:"bg", label:"Base", type:"color", default:"#0B0C14" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"particle-constellation", file:"particle-constellation.html", name:"Particle Constellation",
+    desc:"A field of drifting particles that link into constellation lines when close, and reach toward the cursor.",
+    tags:["particles","interactive"], tint:"#05070D",
+    params:[
+      { key:"color", label:"Color", type:"color", default:"#7DF9FF" },
+      { key:"bg", label:"Background", type:"color", default:"#05070D" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"linklen", label:"Link px", type:"range", min:60, max:260, step:10, default:140 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"grid-pulse", file:"grid-pulse.html", name:"Grid Pulse",
+    desc:"A dot-grid that only lights up in a spotlight radius following your cursor, with a pulsing ring at the center.",
+    tags:["grid","interactive"], tint:"#090A0F",
+    params:[
+      { key:"color", label:"Accent", type:"color", default:"#00FF9C" },
+      { key:"bg", label:"Background", type:"color", default:"#090A0F" },
+      { key:"size", label:"Cell px", type:"range", min:16, max:64, step:2, default:34 },
+      { key:"radius", label:"Spotlight px", type:"range", min:120, max:480, step:20, default:260 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"liquid-blob", file:"liquid-blob.html", name:"Liquid Blob",
+    desc:"Gooey blobs merge and separate using an SVG goo filter, pushed apart by the cursor like liquid displacement.",
+    tags:["gooey","interactive"], tint:"#120014",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF4D8D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#FFC24D" },
+      { key:"bg", label:"Background", type:"color", default:"#120014" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"starfield-warp", file:"starfield-warp.html", name:"Starfield Warp",
+    desc:"A drifting 3D starfield that snaps into warp-speed streaks while you hold click or tap.",
+    tags:["particles","interactive"], tint:"#000010",
+    params:[
+      { key:"color", label:"Star color", type:"color", default:"#FFFFFF" },
+      { key:"bg", label:"Background", type:"color", default:"#000010" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"speed", label:"Drift speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"ribbon-flow", file:"ribbon-flow.html", name:"Ribbon Flow",
+    desc:"Silk-like ribbons of light drift and undulate across the screen, bending gently toward the cursor.",
+    tags:["gradient","ambient","interactive"], tint:"#0A0E14",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF6B6B" },
+      { key:"color2", label:"Color 2", type:"color", default:"#4ECDC4" },
+      { key:"bg", label:"Background", type:"color", default:"#0A0E14" },
+      { key:"count", label:"Ribbons", type:"range", min:2, max:12, step:1, default:6 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"chromatic-ink-bloom", file:"chromatic-ink-bloom.html", name:"Chromatic Ink Bloom",
+    desc:"Expanding pools of luminous ink bloom like dye in water, with floating pigment and pointer-made splashes.",
+    tags:["ambient","interactive","organic"], tint:"#0B1020",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FFB347" },
+      { key:"color2", label:"Color 2", type:"color", default:"#5DE2E7" },
+      { key:"color3", label:"Color 3", type:"color", default:"#E68CFF" },
+      { key:"bg", label:"Background", type:"color", default:"#0B1020" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"radius", label:"Bloom px", type:"range", min:100, max:420, step:10, default:230 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"cursor-particle-globe", file:"cursor-particle-globe.html", name:"Cursor Particle Globe",
+    desc:"A colorful globe of drifting particle strokes that follows your cursor with a light, playful feel.",
+    tags:["particles","interactive","ambient"], tint:"#FAFBFF",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF5A36" },
+      { key:"color2", label:"Color 2", type:"color", default:"#4267E8" },
+      { key:"color3", label:"Color 3", type:"color", default:"#8D56D9" },
+      { key:"bg", label:"Background", type:"color", default:"#FAFBFF" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"radius", label:"Globe size", type:"range", min:0.16, max:0.6, step:0.01, default:0.34 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#14151B" }
+    ] },
+  { slug:"paper-cutout-drift", file:"paper-cutout-drift.html", name:"Paper Cutout Drift",
+    desc:"Layered paper-like shapes float through a warm editorial space, shifting their shadows with the cursor.",
+    tags:["editorial","ambient","interactive"], tint:"#F7F1E8",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#F08A5D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#B83B5E" },
+      { key:"color3", label:"Color 3", type:"color", default:"#6C5B7B" },
+      { key:"bg", label:"Background", type:"color", default:"#F7F1E8" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Shape size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#24202A" }
+    ] },
+  { slug:"glass-shard-field", file:"glass-shard-field.html", name:"Glass Shard Field",
+    desc:"Translucent geometric shards tumble in a luminous field and bend away from the pointer like floating glass.",
+    tags:["abstract","interactive","ambient"], tint:"#0B1020",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#79E2D0" },
+      { key:"color2", label:"Color 2", type:"color", default:"#A9B7FF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#FFB7D5" },
+      { key:"bg", label:"Background", type:"color", default:"#0B1020" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Shard size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"topographic-breath", file:"topographic-breath.html", name:"Topographic Breath",
+    desc:"Layered contour lines slowly breathe like a living landscape, bending around the cursor and touch point.",
+    tags:["lines","organic","interactive"], tint:"#F3EEE5",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#D96C75" },
+      { key:"color2", label:"Color 2", type:"color", default:"#E4A853" },
+      { key:"color3", label:"Color 3", type:"color", default:"#76A89A" },
+      { key:"bg", label:"Background", type:"color", default:"#F3EEE5" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Contour size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#27302D" }
+    ] },
+  { slug:"petal-orbit-garden", file:"petal-orbit-garden.html", name:"Petal Orbit Garden",
+    desc:"Soft flowers open and rotate in a slow generative garden, leaning toward the pointer like sunflowers.",
+    tags:["organic","ambient","interactive"], tint:"#FFF8F0",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#F29E4B" },
+      { key:"color2", label:"Color 2", type:"color", default:"#D95D8A" },
+      { key:"color3", label:"Color 3", type:"color", default:"#77BFA3" },
+      { key:"bg", label:"Background", type:"color", default:"#FFF8F0" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Petal size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#30252A" }
+    ] },
+  { slug:"prism-rain", file:"prism-rain.html", name:"Prism Rain",
+    desc:"Slanted prismatic streaks fall through a quiet sky, accelerating and bending when the cursor passes through them.",
+    tags:["streaks","interactive","ambient"], tint:"#12192A",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF6B6B" },
+      { key:"color2", label:"Color 2", type:"color", default:"#FFD166" },
+      { key:"color3", label:"Color 3", type:"color", default:"#5CA9FF" },
+      { key:"bg", label:"Background", type:"color", default:"#12192A" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Streak size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"neon-torus-orbit", file:"neon-torus-orbit.html", name:"Neon Torus Orbit",
+    desc:"A spinning 3D torus made of neon points follows the cursor with a responsive camera tilt.",
+    tags:["3d","particles","interactive"], tint:"#060712",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#00E5FF" },
+      { key:"color2", label:"Color 2", type:"color", default:"#E44DFF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#A5FF4D" },
+      { key:"bg", label:"Background", type:"color", default:"#060712" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"radius", label:"Torus px", type:"range", min:100, max:360, step:10, default:240 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"holographic-cube-lattice", file:"holographic-cube-lattice.html", name:"Holographic Cube Lattice",
+    desc:"A floating three-dimensional lattice of wire cubes shifts perspective as the cursor moves through it.",
+    tags:["3d","lines","interactive"], tint:"#090C19",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#71F6FF" },
+      { key:"color2", label:"Color 2", type:"color", default:"#7D8CFF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#FF8DCA" },
+      { key:"bg", label:"Background", type:"color", default:"#090C19" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Cube size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"ember-swarm", file:"ember-swarm.html", name:"Ember Swarm",
+    desc:"Thousands of warm drifting embers swirl in fluid currents and scatter away from the cursor.",
+    tags:["particles","organic","interactive"], tint:"#140A12",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF5F3D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#FFB84A" },
+      { key:"color3", label:"Color 3", type:"color", default:"#FFE8A3" },
+      { key:"bg", label:"Background", type:"color", default:"#140A12" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Ember size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"gradient-brush-trails", file:"gradient-brush-trails.html", name:"Gradient Brush Trails",
+    desc:"Broad translucent brush marks drift through a color field, bending and stretching toward the cursor.",
+    tags:["gradient","brushes","interactive"], tint:"#0D1020",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF6B8A" },
+      { key:"color2", label:"Color 2", type:"color", default:"#FFB86B" },
+      { key:"color3", label:"Color 3", type:"color", default:"#7A7CFF" },
+      { key:"bg", label:"Background", type:"color", default:"#0D1020" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Brush size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"spectrum-ink-strokes", file:"spectrum-ink-strokes.html", name:"Spectrum Ink Strokes",
+    desc:"Cursor movement lays down fading, multicolor ink strokes while ambient strokes keep the canvas alive between gestures.",
+    tags:["gradient","brushes","interactive"], tint:"#0B0D16",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF4D9D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#FFB347" },
+      { key:"color3", label:"Color 3", type:"color", default:"#5D9CFF" },
+      { key:"bg", label:"Background", type:"color", default:"#0B0D16" },
+      { key:"density", label:"Density", type:"range", min:0.3, max:2.5, step:0.1, default:1 },
+      { key:"size", label:"Stroke size", type:"range", min:0.5, max:1.8, step:0.1, default:1 },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"gloom-orb-trail", file:"gloom-orb-trail.html", name:"Gloom Orb Trail",
+    desc:"A large shadowy sci-fi orb darts through space or drags behind the cursor, leaving a tapered gradient wake that dissolves into grain.",
+    tags:["gradient","scifi","interactive"], tint:"#060912",
+    params:[
+      { key:"color", label:"Orb color", type:"color", default:"#9A7CFF" },
+      { key:"bg", label:"Background", type:"color", default:"#060912" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"size", label:"Orb size", type:"range", min:0.09, max:0.34, step:0.01, default:0.18 },
+      { key:"grain", label:"Grain", type:"range", min:0, max:0.35, step:0.01, default:0.14 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] }
+];
+
+/* =====================================================================
+   URL / EMBED HELPERS
+   ===================================================================== */
+function buildUrl(bg, state){
+  const url = new URL(RESOLVED_BASE + bg.file);
+  bg.params.forEach(p => {
+    const v = state[p.key];
+    if(v !== undefined && v !== "" && String(v) !== String(p.default)){
+      url.searchParams.set(p.key, v);
+    }
+  });
+  return url.toString();
+}
+function buildEmbedCode(url){
+  return `<iframe src="${url}"\n  style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;"\n  loading="lazy" title="background"></iframe>`;
+}
+
+const ARROW_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg>`;
+const CLOSE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" opacity="0.35"/><path d="M10 8l6 4-6 4V8z" fill="white" stroke="none"/></svg>`;
+
+/* =====================================================================
+   TOOLBAR
+   ===================================================================== */
+function renderToolbar(){
+  const allTags = Array.from(new Set(BACKGROUNDS.flatMap(b => b.tags))).sort();
+  const toolbar = document.getElementById("toolbar");
+  const allBtn = document.createElement("button");
+  allBtn.className = "tag-btn active";
+  allBtn.textContent = "All";
+  allBtn.dataset.tag = "";
+  toolbar.appendChild(allBtn);
+
+  allTags.forEach(tag => {
+    const btn = document.createElement("button");
+    btn.className = "tag-btn";
+    btn.textContent = tag;
+    btn.dataset.tag = tag;
+    toolbar.appendChild(btn);
+  });
+
+  toolbar.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tag-btn");
+    if(!btn) return;
+    toolbar.querySelectorAll(".tag-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tag = btn.dataset.tag;
+    document.querySelectorAll(".card").forEach(card => {
+      const tags = card.dataset.tags.split(",");
+      card.style.display = (!tag || tags.includes(tag)) ? "" : "none";
+    });
+  });
+
+  const toolbarWrap = document.getElementById("toolbarWrap");
+  window.addEventListener("scroll", () => {
+    toolbarWrap.classList.toggle("scrolled", window.scrollY > 8);
+  }, { passive:true });
+}
+
+/* =====================================================================
+   GALLERY — cards render as static tinted tiles with a play icon.
+   Only ONE background animates at a time: the card the pointer is
+   currently over (desktop) or the one nearest viewport center (touch/
+   scroll). Every other iframe is either unloaded (src="") or paused.
+   This is the fix for the multi-iframe lag.
+   ===================================================================== */
+let activeCard = null; // currently playing card element
+
+function setActive(card){
+  if(activeCard === card) return;
+  if(activeCard) stopCard(activeCard);
+  activeCard = card;
+  if(card) startCard(card);
+}
+
+function startCard(card){
+  const preview = card.querySelector(".card-preview");
+  const iframe = card.querySelector("iframe");
+  const bg = card._bg;
+  if(!iframe.getAttribute("src")){
+    iframe.addEventListener("load", () => iframe.classList.add("loaded"), { once:true });
+    iframe.setAttribute("src", buildUrl(bg, card._defaultState));
+  }
+  preview.classList.add("playing");
+}
+
+function stopCard(card){
+  const preview = card.querySelector(".card-preview");
+  const iframe = card.querySelector("iframe");
+  preview.classList.remove("playing");
+  // fully unload to kill the animation loop & free GPU/CPU
+  iframe.classList.remove("loaded");
+  iframe.removeAttribute("src");
+}
+
+function renderGallery(){
+  const gallery = document.getElementById("gallery");
+
+  BACKGROUNDS.forEach((bg) => {
+    const defaultState = {};
+    bg.params.forEach(p => defaultState[p.key] = p.default);
+
+    const card = document.createElement("section");
+    card.className = "card";
+    card.dataset.tags = bg.tags.join(",");
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Open ${bg.name} customization`);
+    card._bg = bg;
+    card._defaultState = defaultState;
+
+    card.innerHTML = `
+      <div class="card-preview" style="--card-tint:${bg.tint || '#0B0C10'}">
+        <iframe loading="lazy" title="${bg.name} preview"></iframe>
+        <div class="card-poster">${PLAY_ICON}</div>
+        <div class="card-play-hint">Hover to preview</div>
+      </div>
+      <div class="card-info">
+        <div class="card-title-row">
+          <div class="card-title">${bg.name}</div>
+          <div class="card-expand-icon">${ARROW_ICON}</div>
+        </div>
+        <div class="card-tags">${bg.tags.map(t => `<span class="chip">${t}</span>`).join("")}</div>
+      </div>
+    `;
+
+    card.addEventListener("pointerenter", () => setActive(card));
+    card.addEventListener("pointerleave", () => { if(activeCard === card) setActive(null); });
+    card.addEventListener("focus", () => setActive(card));
+    card.addEventListener("blur", () => { if(activeCard === card) setActive(null); });
+
+    card.addEventListener("click", () => openDetail(bg));
+    card.addEventListener("keydown", (e) => {
+      if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetail(bg); }
+    });
+
+    gallery.appendChild(card);
+  });
+
+  // scroll-reveal, staggered, respects reduced motion
+  const cards = Array.from(document.querySelectorAll(".card"));
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    cards.forEach(c => c.classList.add("revealed"));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if(entry.isIntersecting){
+          const idx = cards.indexOf(entry.target);
+          setTimeout(() => entry.target.classList.add("revealed"), (idx % 3) * 70);
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold:0.15 });
+    cards.forEach(c => io.observe(c));
+  }
+
+  // touch devices: no hover, so nearest-to-center card auto-plays while scrolling
+  if(matchMedia("(hover: none)").matches){
+    let ticking = false;
+    function pickNearestCenter(){
+      ticking = false;
+      const viewportCenter = window.innerHeight / 2;
+      let best = null, bestDist = Infinity;
+      cards.forEach(c => {
+        const r = c.getBoundingClientRect();
+        if(r.bottom < 0 || r.top > window.innerHeight) return;
+        const dist = Math.abs((r.top + r.bottom)/2 - viewportCenter);
+        if(dist < bestDist){ bestDist = dist; best = c; }
+      });
+      setActive(best);
+    }
+    window.addEventListener("scroll", () => {
+      if(!ticking){ ticking = true; requestAnimationFrame(pickNearestCenter); }
+    }, { passive:true });
+    pickNearestCenter();
+  }
+}
+
+/* =====================================================================
+   DETAIL OVERLAY
+   ===================================================================== */
+const overlay = document.getElementById("overlay");
+const overlayBackdrop = document.getElementById("overlayBackdrop");
+const detailEl = document.getElementById("detail");
+
+function openDetail(bg){
+  setActive(null); // stop any gallery preview so only the modal's iframe runs
+
+  const state = {};
+  bg.params.forEach(p => state[p.key] = p.default);
+
+  detailEl.innerHTML = `
+    <button class="detail-close" aria-label="Close">${CLOSE_ICON}</button>
+    <div class="detail-preview">
+      <button class="preview-refresh-btn" type="button">Refresh preview</button>
+      <iframe class="detail-iframe" loading="lazy" title="${bg.name} live preview"></iframe>
+    </div>
+    <div class="detail-body">
+      <h2 class="detail-title">${bg.name}</h2>
+      <div class="detail-tags">${bg.tags.map(t => `<span class="chip">${t}</span>`).join("")}</div>
+      <p class="detail-desc">${bg.desc}</p>
+      <p class="section-label">Customize</p>
+      <div class="controls"></div>
+      <p class="section-label">Embed</p>
+      <div class="urlbar">
+        <input type="text" class="url-output" readonly aria-label="Embed URL for ${bg.name}">
+        <button class="copy-url-btn">Copy URL</button>
+      </div>
+      <details class="code-toggle">
+        <summary>Full &lt;iframe&gt; snippet</summary>
+        <pre class="embed-code"></pre>
+        <button class="btn copy-code-btn">Copy snippet</button>
+      </details>
+    </div>
+  `;
+
+  const iframe = detailEl.querySelector(".detail-iframe");
+  const refreshButton = detailEl.querySelector(".preview-refresh-btn");
+  const controlsEl = detailEl.querySelector(".controls");
+  const urlOutput = detailEl.querySelector(".url-output");
+  const codeEl = detailEl.querySelector(".embed-code");
+
+  function updateEmbed(){
+    const url = buildUrl(bg, state);
+    urlOutput.value = url;
+    codeEl.textContent = buildEmbedCode(url);
+  }
+
+  function refresh(){
+    updateEmbed();
+    const url = buildUrl(bg, state);
+    refreshButton.classList.remove("pending");
+    iframe.classList.remove("loaded");
+    iframe.onload = () => iframe.classList.add("loaded");
+    iframe.setAttribute("src", url);
+  }
+
+  bg.params.forEach(p => {
+    const field = document.createElement("div");
+    field.className = "field";
+    const fieldId = `${bg.slug}-${p.key}`;
+
+    if(p.type === "color"){
+      field.innerHTML = `<label for="${fieldId}">${p.label}</label><div class="row"><input type="color" id="${fieldId}" value="${p.default}"><span class="val">${p.default}</span></div>`;
+      const input = field.querySelector("input");
+      const val = field.querySelector(".val");
+      input.addEventListener("input", () => { state[p.key] = input.value.toUpperCase(); val.textContent = state[p.key]; updateEmbed(); refreshButton.classList.add("pending"); });
+    } else if(p.type === "range"){
+      field.innerHTML = `<label for="${fieldId}">${p.label}</label><div class="row"><input type="range" id="${fieldId}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"><span class="val">${p.default}</span></div>`;
+      const input = field.querySelector("input");
+      const val = field.querySelector(".val");
+      input.addEventListener("input", () => { state[p.key] = input.value; val.textContent = input.value; updateEmbed(); refreshButton.classList.add("pending"); });
+    } else {
+      field.innerHTML = `<label for="${fieldId}">${p.label}</label><div class="row"><input type="text" id="${fieldId}" placeholder="optional" value="${p.default}"></div>`;
+      const input = field.querySelector("input");
+      input.addEventListener("input", () => { state[p.key] = input.value; updateEmbed(); refreshButton.classList.add("pending"); });
+    }
+    controlsEl.appendChild(field);
+  });
+
+  refresh();
+
+  refreshButton.addEventListener("click", refresh);
+  detailEl.querySelector(".copy-url-btn").addEventListener("click", (e) => copyText(urlOutput.value, e.target));
+  detailEl.querySelector(".copy-code-btn").addEventListener("click", (e) => copyText(codeEl.textContent, e.target));
+  detailEl.querySelector(".detail-close").addEventListener("click", closeDetail);
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeDetail(){
+  overlay.classList.remove("open");
+  document.body.style.overflow = "";
+  setTimeout(() => { detailEl.innerHTML = ""; }, 350);
+}
+
+overlayBackdrop.addEventListener("click", closeDetail);
+window.addEventListener("keydown", (e) => {
+  if(e.key === "Escape" && overlay.classList.contains("open")) closeDetail();
+});
+
+function copyText(text, btn){
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "Copied ✓";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("copied"); }, 1400);
+  }).catch(() => { btn.textContent = "Press ⌘/Ctrl+C"; });
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+(async function boot(){
+  renderToolbar();
+  await resolveBase(BACKGROUNDS[0].file);
+  renderGallery();
+})();
+</script>
+</body>
+</html>

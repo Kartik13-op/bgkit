@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!--
+  GRID PULSE — technical dot-grid with a radial spotlight that follows the cursor
+  ---------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/grid-pulse.html?color=%2300FF9C&bg=%23090A0F&size=32&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color      hex, grid/accent color        default #00FF9C
+    bg         hex, background color         default #090A0F
+    size       int px, grid cell size        default 34
+    radius     int px, spotlight radius      default 260
+    text       optional hero text overlay    default "" (none)
+    textcolor  hex, hero text color          default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Grid Pulse Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --color:#00FF9C;
+    --bg:#090A0F;
+    --size:34px;
+    --radius:260px;
+    --mx:50%;
+    --my:50%;
+  }
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; background:var(--bg); }
+
+  .grid-base{
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size:var(--size) var(--size);
+  }
+
+  .grid-glow{
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(to right, var(--color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color) 1px, transparent 1px);
+    background-size:var(--size) var(--size);
+    -webkit-mask-image:radial-gradient(circle var(--radius) at var(--mx) var(--my), black 0%, transparent 70%);
+    mask-image:radial-gradient(circle var(--radius) at var(--mx) var(--my), black 0%, transparent 70%);
+    opacity:0.9;
+    transition:opacity 0.3s ease;
+  }
+
+  .spot{
+    position:absolute; inset:0;
+    background:radial-gradient(circle var(--radius) at var(--mx) var(--my), rgba(255,255,255,0.06), transparent 70%);
+    pointer-events:none;
+  }
+
+  .vignette{
+    position:absolute; inset:0;
+    background:radial-gradient(ellipse at 50% 50%, transparent 40%, var(--bg) 100%);
+    pointer-events:none;
+  }
+
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 0 30px rgba(0,0,0,0.5);
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{
+    to{ opacity:1; transform:translateY(0); }
+    from{ opacity:0; transform:translateY(12px); }
+  }
+
+  .pulse-ring{
+    position:absolute;
+    width:6px; height:6px;
+    border:1px solid var(--color);
+    border-radius:50%;
+    left:var(--mx); top:var(--my);
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+    opacity:0.8;
+    animation:ringpulse 2s ease-out infinite;
+  }
+  @keyframes ringpulse{
+    0%{ width:6px; height:6px; opacity:0.9; }
+    100%{ width:120px; height:120px; opacity:0; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="grid-base"></div>
+  <div class="grid-glow"></div>
+  <div class="spot"></div>
+  <div class="pulse-ring"></div>
+  <div class="vignette"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){
+    return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback;
+  }
+
+  var color = safeHex(getParam("color", "#00FF9C"), "#00FF9C");
+  var bg = safeHex(getParam("bg", "#090A0F"), "#090A0F");
+  var size = parseInt(getParam("size", "34"), 10) || 34;
+  var radius = parseInt(getParam("radius", "260"), 10) || 260;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+
+  var root = document.documentElement.style;
+  root.setProperty("--color", color);
+  root.setProperty("--bg", bg);
+  root.setProperty("--size", size + "px");
+  root.setProperty("--radius", radius + "px");
+
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var stage = document.getElementById("stage");
+  var targetX = window.innerWidth/2, targetY = window.innerHeight/2;
+  var curX = targetX, curY = targetY;
+
+  window.addEventListener("mousemove", function(e){
+    targetX = e.clientX; targetY = e.clientY;
+  }, { passive:true });
+  window.addEventListener("touchmove", function(e){
+    if(e.touches[0]){ targetX = e.touches[0].clientX; targetY = e.touches[0].clientY; }
+  }, { passive:true });
+
+  function animate(){
+    curX += (targetX - curX) * 0.12;
+    curY += (targetY - curY) * 0.12;
+    root.setProperty("--mx", curX + "px");
+    root.setProperty("--my", curY + "px");
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+</script>
+</body>
+</html>
