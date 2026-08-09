@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<!--
+  PRISM MESH SHIFT — high-saturation mesh blobs drift energetically and
+  trade colors when they pass near one another, like light splitting
+  through a prism. Built for creative agencies, portfolios, and music/
+  event sites that want bold, kinetic energy.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/prism-mesh-shift.html?color1=%23FF3D6E&color2=%23FFC145&color3=%237B2FF7&color4=%2300E5A0&bg=%230A0612&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, mesh color A            default #FF3D6E
+    color2     hex, mesh color B            default #FFC145
+    color3     hex, mesh color C            default #7B2FF7
+    color4     hex, mesh color D            default #00E5A0
+    bg         hex, base background color   default #0A0612
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: 4 pre-built sprites blitted via drawImage. Color-swap on proximity
+  reassigns which pre-built sprite index each point uses (cheap integer
+  swap) rather than recoloring pixels. No per-pixel work.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Prism Mesh Shift Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#0A0612; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  #view{ filter:blur(50px) saturate(1.35); transform:scale(1.14); }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+  .grain{
+    position:absolute; inset:0; opacity:0.045; pointer-events:none; z-index:1;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="view"></canvas>
+  <div class="grain"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color1 = safeHex(getParam("color1", "#FF3D6E"), "#FF3D6E");
+  var color2 = safeHex(getParam("color2", "#FFC145"), "#FFC145");
+  var color3 = safeHex(getParam("color3", "#7B2FF7"), "#7B2FF7");
+  var color4 = safeHex(getParam("color4", "#00E5A0"), "#00E5A0");
+  var bg = safeHex(getParam("bg", "#0A0612"), "#0A0612");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var colors = [color1, color2, color3, color4].map(hexToRgb);
+
+  var view = document.getElementById("view");
+  var ctx = view.getContext("2d");
+  var W, H, DPR;
+  var points = [];
+  var sprites = [];
+  var mouse = { x:null, y:null, active:false };
+
+  function buildSprite(rgb, radius){
+    var d = radius * 2;
+    var s = document.createElement("canvas");
+    s.width = d; s.height = d;
+    var sc = s.getContext("2d");
+    var grad = sc.createRadialGradient(radius, radius, 0, radius, radius, radius);
+    grad.addColorStop(0, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.9)");
+    grad.addColorStop(0.5, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0.48)");
+    grad.addColorStop(1, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0)");
+    sc.fillStyle = grad;
+    sc.fillRect(0, 0, d, d);
+    return s;
+  }
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    view.width = W * DPR;
+    view.height = H * DPR;
+    view.style.width = W + "px";
+    view.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var radius = Math.max(W, H) * 0.48;
+    sprites = colors.map(function(rgb){ return buildSprite(rgb, radius); });
+
+    var anchors = [
+      { ax:0.22, ay:0.3 }, { ax:0.78, ay:0.24 },
+      { ax:0.24, ay:0.76 }, { ax:0.76, ay:0.72 }
+    ];
+    points = anchors.map(function(a, i){
+      return {
+        baseX: a.ax * W, baseY: a.ay * H,
+        x: a.ax * W, y: a.ay * H,
+        radius: radius,
+        colorIdx: i,
+        phase: i * 1.6,
+        driftX: 0.14 + Math.random()*0.08,
+        driftY: 0.12 + Math.random()*0.08,
+        swapCooldown: 0
+      };
+    });
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var t = 0;
+  var proximityThreshold;
+
+  function step(){
+    if(!running) return;
+    if(!reduced) t += 0.01 * speed;
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+
+    proximityThreshold = Math.max(W, H) * 0.22;
+
+    for(var i=0;i<points.length;i++){
+      var p = points[i];
+      var wanderX = p.baseX + Math.sin(t*p.driftX + p.phase) * W * 0.16;
+      var wanderY = p.baseY + Math.cos(t*p.driftY + p.phase*1.5) * H * 0.16;
+
+      if(mouse.active){
+        var dx = mouse.x - wanderX, dy = mouse.y - wanderY;
+        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        if(dist < 260){
+          var pull = (1 - dist/260) * 0.3;
+          wanderX += dx * pull;
+          wanderY += dy * pull;
+        }
+      }
+
+      p.x += (wanderX - p.x) * 0.06;
+      p.y += (wanderY - p.y) * 0.06;
+
+      if(p.swapCooldown > 0) p.swapCooldown -= 1;
+    }
+
+    // proximity color swap — cheap O(n^2) with only 4 points
+    for(var a=0; a<points.length; a++){
+      if(points[a].swapCooldown > 0) continue;
+      for(var b=a+1; b<points.length; b++){
+        if(points[b].swapCooldown > 0) continue;
+        var dx2 = points[a].x - points[b].x, dy2 = points[a].y - points[b].y;
+        var d2 = Math.sqrt(dx2*dx2 + dy2*dy2);
+        if(d2 < proximityThreshold * 0.4){
+          var tmp = points[a].colorIdx;
+          points[a].colorIdx = points[b].colorIdx;
+          points[b].colorIdx = tmp;
+          points[a].swapCooldown = 90;
+          points[b].swapCooldown = 90;
+          break;
+        }
+      }
+    }
+
+    for(var pi=0; pi<points.length; pi++){
+      var pt = points[pi];
+      var sprite = sprites[pt.colorIdx % sprites.length];
+      var d3 = pt.radius * 2;
+      ctx.drawImage(sprite, pt.x - pt.radius, pt.y - pt.radius, d3, d3);
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

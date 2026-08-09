@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<!--
+  HALFTONE WAVE — a print-style halftone dot field ripples like a magazine
+  cover coming alive, dots scaling with a traveling wave and the cursor.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/halftone-wave.html?color=%23FF3B30&bg=%23FFF9F2&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color      hex, dot color               default #FF3B30
+    bg         hex, background color        default #FFF9F2
+    size       int px, grid cell size       default 26
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #14151B
+
+  PERF: dot grid is capped to a max of ~2200 cells regardless of viewport by
+  scaling the effective cell size up on large screens. Single canvas, no
+  per-dot gradients, no shadowBlur, plain arc() fills only.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Halftone Wave Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#FFF9F2; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color = safeHex(getParam("color", "#FF3B30"), "#FF3B30");
+  var bg = safeHex(getParam("bg", "#FFF9F2"), "#FFF9F2");
+  var baseSize = parseInt(getParam("size", "26"), 10) || 26;
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#14151B"), "#14151B");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var rgb = hexToRgb(color);
+  var rgbStr = rgb.r + "," + rgb.g + "," + rgb.b;
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H, DPR;
+  var cols, rows, cell;
+  var mouse = { x:-9999, y:-9999 };
+  var t = 0;
+
+  var MAX_CELLS = 2200;
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    cell = baseSize;
+    var estCells = (W/cell) * (H/cell);
+    if(estCells > MAX_CELLS){
+      var scale = Math.sqrt(estCells / MAX_CELLS);
+      cell = baseSize * scale;
+    }
+    cols = Math.ceil(W / cell) + 1;
+    rows = Math.ceil(H / cell) + 1;
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x = e.clientX; mouse.y = e.clientY; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.x = -9999; mouse.y = -9999; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  function step(){
+    if(!running) return;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgb(" + rgbStr + ")";
+
+    if(!reduced) t += 0.035 * speed;
+
+    for(var iy=0; iy<rows; iy++){
+      for(var ix=0; ix<cols; ix++){
+        var x = ix * cell;
+        var y = iy * cell;
+
+        var wave = Math.sin((x*0.02) + (y*0.02) + t) * 0.5 + 0.5;
+
+        var dx = mouse.x - x, dy = mouse.y - y;
+        var distSq = dx*dx + dy*dy;
+        var mouseBoost = 0;
+        if(distSq < 40000){ // 200px radius
+          mouseBoost = (1 - Math.sqrt(distSq)/200) * 0.9;
+        }
+
+        var scale = Math.min(1, wave * 0.6 + mouseBoost);
+        if(scale <= 0.04) continue;
+
+        var r = (cell * 0.42) * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!--
+  PIXEL SORT DRIFT — glitch-art vertical bands slowly shift and streak,
+  like a datamoshed pixel-sort still that never fully settles.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/pixel-sort-drift.html?color1=%23FF2E63&color2=%2308D9D6&bg=%230A0A0F&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, band color A            default #FF2E63
+    color2     hex, band color B            default #08D9D6
+    bg         hex, background color        default #0A0A0F
+    density    float multiplier for bands   default 1  (capped)
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: band count hard-capped at 90. Each band is drawn as a handful of
+  flat-fill rects (segment heights), not per-pixel manipulation — real
+  pixel-sorting is done once as a static base texture at load, then only
+  band offsets animate, so steady-state cost per frame is just N fillRects.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pixel Sort Drift Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#0A0A0F; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 24px rgba(0,0,0,0.6);
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+
+  var color1 = safeHex(getParam("color1", "#FF2E63"), "#FF2E63");
+  var color2 = safeHex(getParam("color2", "#08D9D6"), "#08D9D6");
+  var bg = safeHex(getParam("bg", "#0A0A0F"), "#0A0A0F");
+  var density = Math.min(2.5, Math.max(0.3, parseFloat(getParam("density", "1")) || 1));
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var c1 = hexToRgb(color1), c2 = hexToRgb(color2);
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H, DPR;
+  var bands = [];
+  var MAX_BANDS = 90;
+  var mouse = { x:-9999, active:false };
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var count = Math.max(30, Math.min(MAX_BANDS, Math.round(60 * density)));
+    var bandW = W / count;
+    bands = [];
+    for(var i=0;i<count;i++){
+      var segCount = 3 + Math.floor(Math.random()*4);
+      var segs = [];
+      var y = 0;
+      for(var s=0; s<segCount; s++){
+        var h = (H/segCount) * (0.6 + Math.random()*0.8);
+        var mix = Math.random();
+        segs.push({ h: h, mix: mix, lightness: 0.5 + Math.random()*0.9 });
+        y += h;
+      }
+      bands.push({
+        x: i*bandW, w: bandW + 0.5,
+        segs: segs,
+        offset: Math.random()*H,
+        driftSpeed: (0.15 + Math.random()*0.5) * (Math.random() < 0.5 ? 1 : -1),
+        glitchPhase: Math.random()*100
+      });
+    }
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.active=true; } }, {passive:true});
+
+  var t = 0;
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  function step(){
+    if(!running) return;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    if(!reduced) t += 0.5 * speed;
+
+    for(var bi=0; bi<bands.length; bi++){
+      var band = bands[bi];
+
+      var glitchKick = 0;
+      if(mouse.active){
+        var dist = Math.abs(mouse.x - band.x);
+        if(dist < 90) glitchKick = (1 - dist/90) * 40;
+      }
+
+      var scrollY = ((band.offset + t*band.driftSpeed + glitchKick) % (H*2) + H*2) % (H*2) - H;
+
+      var y = scrollY;
+      var totalH = 0;
+      for(var s=0; s<band.segs.length; s++){ totalH += band.segs[s].h; }
+
+      // draw two copies stacked so scroll wraps seamlessly
+      for(var rep=0; rep<2; rep++){
+        var yy = y + rep*totalH;
+        for(var si=0; si<band.segs.length; si++){
+          var seg = band.segs[si];
+          var rgb = seg.mix > 0.5 ? c1 : c2;
+          var l = Math.min(1.5, seg.lightness);
+          ctx.fillStyle = "rgb(" + Math.min(255,rgb.r*l) + "," + Math.min(255,rgb.g*l) + "," + Math.min(255,rgb.b*l) + ")";
+          ctx.fillRect(band.x, yy, band.w, seg.h);
+          yy += seg.h;
+        }
+      }
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

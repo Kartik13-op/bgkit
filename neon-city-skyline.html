@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<!--
+  NEON CITY SKYLINE — layered silhouette skyline with twinkling windows and
+  slow-drifting fog bands, cursor gently parallaxes the layers.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/neon-city-skyline.html?color1=%23FF3E9A&color2=%2300E5FF&bg=%23090A16&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, window/glow color A     default #FF3E9A
+    color2     hex, window/glow color B     default #00E5FF
+    bg         hex, sky/background color    default #090A16
+    density    float multiplier for windows default 1  (capped)
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: building silhouettes generated once at resize as flat rects (no
+  per-frame regeneration). Window twinkle uses a capped count (≤180) with
+  simple sine flicker, no shadowBlur. Fog layers are 2 translucent
+  gradients pre-built as sprites, translated via drawImage.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neon City Skyline Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#090A16; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.6);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color1 = safeHex(getParam("color1", "#FF3E9A"), "#FF3E9A");
+  var color2 = safeHex(getParam("color2", "#00E5FF"), "#00E5FF");
+  var bg = safeHex(getParam("bg", "#090A16"), "#090A16");
+  var density = Math.min(2.5, Math.max(0.3, parseFloat(getParam("density", "1")) || 1));
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var c1 = hexToRgb(color1), c2 = hexToRgb(color2);
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H, DPR;
+  var buildingsBack = [], buildingsFront = [];
+  var windows = [];
+  var MAX_WINDOWS = 180;
+  var fogSpriteA, fogSpriteB;
+  var mouse = { x:0, y:0 };
+  var t = 0;
+
+  function buildFogSprite(w, h, alpha){
+    var s = document.createElement("canvas");
+    s.width = w; s.height = h;
+    var sc = s.getContext("2d");
+    var grad = sc.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "rgba(180,190,220,0)");
+    grad.addColorStop(0.5, "rgba(180,190,220," + alpha + ")");
+    grad.addColorStop(1, "rgba(180,190,220,0)");
+    sc.fillStyle = grad;
+    sc.fillRect(0, 0, w, h);
+    return s;
+  }
+
+  function genSkyline(baseY, heightFrac, count, seedOffset){
+    var buildings = [];
+    var x = -50;
+    while(x < W + 50){
+      var bw = 30 + Math.random()*70;
+      var bh = H * heightFrac * (0.3 + Math.random()*0.8);
+      buildings.push({ x:x, w:bw, h:bh, y:baseY - bh });
+      x += bw + Math.random()*8;
+    }
+    return buildings;
+  }
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    buildingsBack = genSkyline(H*0.78, 0.5, 0, 1);
+    buildingsFront = genSkyline(H*0.86, 0.65, 0, 2);
+
+    var count = Math.max(60, Math.min(MAX_WINDOWS, Math.round(120 * density)));
+    windows = [];
+    var pool = buildingsFront.concat(buildingsBack.length ? [] : []);
+    var allBuildings = buildingsFront;
+    for(var i=0;i<count;i++){
+      var b = allBuildings[Math.floor(Math.random()*allBuildings.length)];
+      if(!b) continue;
+      windows.push({
+        x: b.x + 4 + Math.random()*(b.w-8),
+        y: b.y + 6 + Math.random()*(b.h-12),
+        colorIdx: Math.random() < 0.5 ? 0 : 1,
+        phase: Math.random()*Math.PI*2,
+        speed: 0.4 + Math.random()*0.8
+      });
+    }
+
+    fogSpriteA = buildFogSprite(W*1.4, H*0.18, 0.05);
+    fogSpriteB = buildFogSprite(W*1.4, H*0.14, 0.04);
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x = (e.clientX/W - 0.5); mouse.y = (e.clientY/H - 0.5); }, {passive:true});
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x = (e.touches[0].clientX/W - 0.5); mouse.y = (e.touches[0].clientY/H - 0.5); } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  function drawSkyline(buildings, parallax, alpha){
+    ctx.save();
+    ctx.translate(mouse.x * parallax, 0);
+    ctx.fillStyle = "rgba(10,12,22," + alpha + ")";
+    for(var i=0;i<buildings.length;i++){
+      var b = buildings[i];
+      ctx.fillRect(b.x, b.y, b.w, H - b.y);
+    }
+    ctx.restore();
+  }
+
+  function step(){
+    if(!running) return;
+
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, bg);
+    grad.addColorStop(1, "rgb(" + Math.round(c1.r*0.12) + "," + Math.round(c1.g*0.08) + "," + Math.round(c1.b*0.18) + ")");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if(!reduced) t += 0.012 * speed;
+
+    drawSkyline(buildingsBack, mouse.x*10, 0.55);
+    drawSkyline(buildingsFront, mouse.x*22, 0.92);
+
+    // windows
+    for(var i=0;i<windows.length;i++){
+      var win = windows[i];
+      var flicker = reduced ? 0.7 : (Math.sin(t*win.speed*3 + win.phase) * 0.5 + 0.5);
+      if(flicker < 0.15) continue;
+      var rgb = win.colorIdx === 0 ? c1 : c2;
+      ctx.fillStyle = "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + (0.35 + flicker*0.65) + ")";
+      ctx.fillRect(win.x + mouse.x*22, win.y, 3, 5);
+    }
+
+    // fog drift
+    var fogX1 = ((t*30) % (W*0.4)) - W*0.2;
+    var fogX2 = (((-t*20) % (W*0.4))) - W*0.2;
+    ctx.drawImage(fogSpriteA, fogX1, H*0.72);
+    ctx.drawImage(fogSpriteB, fogX2, H*0.6);
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

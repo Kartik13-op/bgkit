@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<!--
+  GLOOM ORB TRAIL
+  A large shadowy sci-fi orb darts between random waypoints or drags behind the cursor, leaving a tapered gradient wake that dissolves into grain.
+  Embed: <iframe src="https://kartik13-op.github.io/bgkit/gloom-orb-trail.html?color=%239A7CFF&bg=%23060912&grain=0.14&speed=1.3&text=Signal%20lost" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy" title="Gloom Orb Trail"></iframe>
+  Query params:
+    color      hex, orb and trail accent color       default #9A7CFF
+    bg         hex, background color                  default #060912
+    speed      float, motion multiplier               default 1
+    size       float, orb size as viewport fraction   default 0.18
+    grain      float, grain opacity                    default 0.14
+    text       optional hero headline                 default ""
+    textcolor  hex, hero text color                   default #FFFFFF
+-->
+<html lang="en"><head><meta charset="UTF-8"><title>Gloom Orb Trail</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif}.stage{position:relative;width:100%;height:100%}canvas{position:absolute;inset:0;display:block}.hero{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}.hero span{font-size:clamp(1.8rem,5vw,4rem);font-weight:600;letter-spacing:-.02em;text-align:center;padding:0 1rem;text-shadow:0 4px 30px rgba(0,0,0,.58);opacity:0;animation:reveal 1.4s ease forwards .3s}@keyframes reveal{to{opacity:1;transform:translateY(0)}from{opacity:0;transform:translateY(12px)}}
+</style></head><body><div class="stage" id="stage"><canvas id="c"></canvas><div class="hero"><span id="heroText"></span></div></div><script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){
+    return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback;
+  }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+  var color=safeHex(getParam("color","#9A7CFF"),"#9A7CFF");
+  var bg=safeHex(getParam("bg","#060912"),"#060912");
+  var speed=parseFloat(getParam("speed","1"))||1;
+  var size=parseFloat(getParam("size","0.18"))||0.18;
+  var grain=Math.max(0,Math.min(.45,parseFloat(getParam("grain","0.14"))||0));
+  var text=getParam("text","");
+  var textColor=safeHex(getParam("textcolor","#FFFFFF"),"#FFFFFF");
+  document.body.style.background=bg;
+  document.getElementById("heroText").style.color=textColor;
+  if(text){ document.getElementById("heroText").textContent=text; }
+
+  var canvas=document.getElementById("c"),ctx=canvas.getContext("2d"),W,H,dpr,last=0,orbRadius,trail=[],grainBits=[];
+  var reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var rgb=hexToRgb(color), mouse={x:0,y:0,active:false}, orb={x:0,y:0,vx:0,vy:0,tx:0,ty:0}, waypoint={x:0,y:0,wait:0};
+  var TAU=Math.PI*2;
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function chooseWaypoint(){
+    waypoint.x=rnd(orbRadius,W-orbRadius);
+    waypoint.y=rnd(orbRadius,H-orbRadius);
+    waypoint.wait=rnd(500,1500);
+  }
+  function resize(){
+    W=innerWidth; H=innerHeight; dpr=Math.min(devicePixelRatio||1,2);
+    canvas.width=Math.floor(W*dpr); canvas.height=Math.floor(H*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+    orbRadius=Math.min(W,H)*Math.max(.09,Math.min(.34,size));
+    if(!orb.x){orb.x=orb.tx=W*.5;orb.y=orb.ty=H*.5;chooseWaypoint();}
+    else {orb.x=Math.max(orbRadius,Math.min(W-orbRadius,orb.x));orb.y=Math.max(orbRadius,Math.min(H-orbRadius,orb.y));}
+    grainBits=[];
+    for(var i=0;i<Math.round(360*grain);i++) grainBits.push({x:rnd(0,W),y:rnd(0,H),r:rnd(.3,1.5),a:rnd(.3,1)});
+  }
+  function addTrail(){
+    trail.unshift({x:orb.x,y:orb.y,vx:orb.vx,vy:orb.vy,r:orbRadius});
+    if(trail.length>72) trail.pop();
+  }
+  function drawTrail(t){
+    if(trail.length<3)return;
+    var left=[],right=[],c=rgb;
+    for(var i=0;i<trail.length;i++){
+      var p=trail[i],next=trail[Math.min(i+1,trail.length-1)],prev=trail[Math.max(0,i-1)];
+      var dx=next.x-prev.x,dy=next.y-prev.y,len=Math.sqrt(dx*dx+dy*dy)||1;
+      var nx=-dy/len,ny=dx/len,fade=Math.pow(1-i/(trail.length-1),.78),width=orbRadius*fade;
+      left.push({x:p.x+nx*width,y:p.y+ny*width});right.push({x:p.x-nx*width,y:p.y-ny*width});
+    }
+    var grad=ctx.createLinearGradient(trail[trail.length-1].x,trail[trail.length-1].y,trail[0].x,trail[0].y);
+    grad.addColorStop(0,"rgba("+c.r+","+c.g+","+c.b+",0)");
+    grad.addColorStop(.46,"rgba("+c.r+","+c.g+","+c.b+",.10)");
+    grad.addColorStop(.82,"rgba("+c.r+","+c.g+","+c.b+",.28)");
+    grad.addColorStop(1,"rgba("+c.r+","+c.g+","+c.b+",.5)");
+    ctx.globalCompositeOperation="source-over";ctx.fillStyle=grad;ctx.beginPath();ctx.moveTo(left[0].x,left[0].y);
+    for(var j=1;j<left.length;j++)ctx.lineTo(left[j].x,left[j].y);
+    for(var k=right.length-1;k>=0;k--)ctx.lineTo(right[k].x,right[k].y);
+    ctx.closePath();ctx.fill();
+  }
+  function drawOrb(t){
+    var g=ctx.createRadialGradient(orb.x-orbRadius*.15,orb.y-orbRadius*.18,orbRadius*.06,orb.x,orb.y,orbRadius*1.05);
+    g.addColorStop(0,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",.82)");
+    g.addColorStop(.58,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",.7)");
+    g.addColorStop(1,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",.48)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(orb.x,orb.y,orbRadius,0,TAU);ctx.fill();
+    ctx.strokeStyle="rgba("+rgb.r+","+rgb.g+","+rgb.b+",.32)";ctx.lineWidth=1;ctx.beginPath();ctx.arc(orb.x,orb.y,orbRadius*.99,0,TAU);ctx.stroke();
+  }
+  function drawGrain(t){
+    if(!grain)return;
+    ctx.globalCompositeOperation="screen";
+    grainBits.forEach(function(p){
+      var pulse=.18+.82*((Math.sin(t*.004+p.x)+1)/2);
+      ctx.fillStyle="rgba(255,255,255,"+(grain*.08*pulse*p.a)+")";ctx.fillRect(p.x,p.y,p.r,p.r);
+    });
+    ctx.globalCompositeOperation="source-over";
+  }
+  function render(t,dt){
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    drawTrail(t);drawOrb(t);drawGrain(t);
+  }
+  function step(t){
+    var dt=Math.min(40,t-last||16);last=t;
+    if(mouse.active){orb.tx=mouse.x;orb.ty=mouse.y;}
+    else {waypoint.wait-=dt;if(waypoint.wait<=0 && Math.hypot(waypoint.x-orb.x,waypoint.y-orb.y)<orbRadius*1.8)chooseWaypoint();orb.tx=waypoint.x;orb.ty=waypoint.y;}
+    var dx=orb.tx-orb.x,dy=orb.ty-orb.y,dist=Math.sqrt(dx*dx+dy*dy)||1;
+    var accel=(mouse.active?0.0028:0.0052)*speed;
+    orb.vx+=(dx/dist*accel*dt-orb.vx*.0015*dt);orb.vy+=(dy/dist*accel*dt-orb.vy*.0015*dt);
+    var maxV=(mouse.active?1.7:4.8)*speed;var v=Math.sqrt(orb.vx*orb.vx+orb.vy*orb.vy)||1;if(v>maxV){orb.vx=orb.vx/v*maxV;orb.vy=orb.vy/v*maxV;}
+    orb.x+=orb.vx*dt;orb.y+=orb.vy*dt;
+    orb.x=Math.max(orbRadius,Math.min(W-orbRadius,orb.x));orb.y=Math.max(orbRadius,Math.min(H-orbRadius,orb.y));
+    addTrail();render(t,dt);if(!reduced)requestAnimationFrame(step);
+  }
+  addEventListener("resize",resize,{passive:true});
+  addEventListener("mousemove",function(e){mouse.x=e.clientX;mouse.y=e.clientY;mouse.active=true},{passive:true});
+  addEventListener("mouseleave",function(){mouse.active=false;chooseWaypoint()},{passive:true});
+  addEventListener("touchmove",function(e){if(e.touches[0]){mouse.x=e.touches[0].clientX;mouse.y=e.touches[0].clientY;mouse.active=true}},{passive:true});
+  addEventListener("touchend",function(){mouse.active=false;chooseWaypoint()},{passive:true});
+  resize();if(reduced){render(0,16);}else{requestAnimationFrame(step);}
+})();
+</script></body></html>
