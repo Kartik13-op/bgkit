@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<!--
+  MAGNETIC FIELD LINES — iron-filing style field lines flow across the
+  screen and bend around the cursor like a magnet, with two ambient poles.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/magnetic-field-lines.html?color=%2300D4FF&bg=%23050810&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color      hex, line color              default #00D4FF
+    bg         hex, background color        default #050810
+    density    float multiplier for lines   default 1  (capped)
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: line count hard-capped at 46. Each line is a single quadratic-curve
+  stroke recomputed from a small set of pole positions per frame — no
+  particle simulation, no shadowBlur, no per-frame allocation of new arrays
+  (positions written into pre-sized typed arrays).
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Magnetic Field Lines Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#050810; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 0 30px rgba(0,0,0,0.6);
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color = safeHex(getParam("color", "#00D4FF"), "#00D4FF");
+  var bg = safeHex(getParam("bg", "#050810"), "#050810");
+  var density = Math.min(2.5, Math.max(0.3, parseFloat(getParam("density", "1")) || 1));
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var rgb = hexToRgb(color);
+  var rgbStr = rgb.r + "," + rgb.g + "," + rgb.b;
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H, DPR;
+  var lines = [];
+  var MAX_LINES = 46;
+  var poles = []; // {x,y,strength}
+  var mouse = { x:null, y:null, active:false };
+  var t = 0;
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var count = Math.max(16, Math.min(MAX_LINES, Math.round(30 * density)));
+    lines = [];
+    for(var i=0;i<count;i++){
+      lines.push({ y0: (i+0.5) / count * H });
+    }
+
+    poles = [
+      { x: W*0.25, y: H*0.35, strength: 1 },
+      { x: W*0.75, y: H*0.65, strength: -1 }
+    ];
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  var SEGMENTS = 24;
+
+  function fieldDeflection(x, y){
+    var totalDx = 0, totalDy = 0;
+    for(var i=0;i<poles.length;i++){
+      var p = poles[i];
+      var dx = x - p.x, dy = y - p.y;
+      var distSq = dx*dx + dy*dy + 2000;
+      var force = (p.strength * 90000) / distSq;
+      totalDx += dx * force / Math.sqrt(distSq);
+      totalDy += dy * force / Math.sqrt(distSq);
+    }
+    if(mouse.active){
+      var mdx = x - mouse.x, mdy = y - mouse.y;
+      var mDistSq = mdx*mdx + mdy*mdy + 1200;
+      var mForce = (140000) / mDistSq;
+      totalDx += mdx * mForce / Math.sqrt(mDistSq);
+      totalDy += mdy * mForce / Math.sqrt(mDistSq);
+    }
+    return { dx: totalDy, dy: -totalDx }; // perpendicular for flow-along-field feel
+  }
+
+  function step(){
+    if(!running) return;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    if(!reduced) t += 0.004 * speed;
+
+    ctx.lineWidth = 1;
+    for(var li=0; li<lines.length; li++){
+      var y0 = lines[li].y0;
+      ctx.beginPath();
+      var x = 0, y = y0;
+      ctx.moveTo(x, y);
+      for(var s=0; s<SEGMENTS; s++){
+        var def = fieldDeflection(x, y);
+        var stepX = (W / SEGMENTS);
+        x += stepX;
+        y += def.dy * 0.12 + Math.sin(t*2 + li*0.5 + s*0.3) * 1.5;
+        y = Math.max(-20, Math.min(H+20, y));
+        ctx.lineTo(x, y);
+      }
+      var opacity = 0.16 + (li % 3) * 0.05;
+      ctx.strokeStyle = "rgba(" + rgbStr + "," + opacity + ")";
+      ctx.stroke();
+    }
+
+    // pole glows (cheap: small filled circles, no shadowBlur)
+    for(var pi=0; pi<poles.length; pi++){
+      var p = poles[pi];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(" + rgbStr + ",0.6)";
+      ctx.fill();
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

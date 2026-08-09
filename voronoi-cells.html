@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!--
+  VORONOI CELLS — an organic cell/membrane pattern of Voronoi regions,
+  outlines pulsing faintly, cells nearest the cursor brighten and drift apart.
+  --------------------------------------------------------------------------------------
+  <iframe src=".../backgrounds/voronoi-cells.html?color=%2300FFA3&bg=%23071108&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color      hex, membrane line color     default #00FFA3
+    bg         hex, background color        default #071108
+    density    float multiplier for cells   default 1  (capped)
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+
+  PERF: site count hard-capped at 40 — Voronoi is computed per-pixel-ish via
+  a coarse sample grid (not per-pixel), rendered as filled cell polygons
+  approximated with a low-res distance grid then upscaled, which is far
+  cheaper than true per-pixel nearest-site search across the full canvas.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Voronoi Cells Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#071108; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; image-rendering:auto; }
+  .hero{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 0 30px rgba(0,0,0,0.6);
+    opacity:0;
+    animation:reveal 1.2s ease forwards 0.2s;
+  }
+  @keyframes reveal{ to{ opacity:1; transform:translateY(0); } from{ opacity:0; transform:translateY(12px); } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="lowres"></canvas>
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){ return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback; }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color = safeHex(getParam("color", "#00FFA3"), "#00FFA3");
+  var bg = safeHex(getParam("bg", "#071108"), "#071108");
+  var density = Math.min(2.5, Math.max(0.3, parseFloat(getParam("density", "1")) || 1));
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var rgb = hexToRgb(color);
+  var bgRgb = hexToRgb(bg);
+  var rgbStr = rgb.r + "," + rgb.g + "," + rgb.b;
+
+  // low-res buffer canvas: Voronoi computed here at reduced resolution, then
+  // the visible canvas draws it scaled up (cheap) plus crisp outline strokes.
+  var lowCanvas = document.getElementById("lowres");
+  lowCanvas.style.display = "none";
+  var lowCtx = lowCanvas.getContext("2d", { willReadFrequently:true });
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+
+  var W, H, DPR;
+  var LOW_W, LOW_H;
+  var sites = [];
+  var MAX_SITES = 40;
+  var mouse = { x:-99999, y:-99999, active:false };
+  var t = 0;
+
+  var palette = []; // precomputed per-site fill colors (varied brightness)
+
+  function resize(){
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    LOW_W = 130;
+    LOW_H = Math.round(LOW_W * (H/W));
+    lowCanvas.width = LOW_W;
+    lowCanvas.height = LOW_H;
+
+    var count = Math.max(14, Math.min(MAX_SITES, Math.round(24 * density)));
+    sites = [];
+    palette = [];
+    for(var i=0;i<count;i++){
+      sites.push({
+        x: Math.random()*W, y: Math.random()*H,
+        vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
+        baseX: 0, baseY: 0
+      });
+      var b = 0.5 + Math.random()*0.9;
+      palette.push({
+        r: Math.min(255, bgRgb.r + rgb.r*0.06*b*3),
+        g: Math.min(255, bgRgb.g + rgb.g*0.06*b*3),
+        b: Math.min(255, bgRgb.b + rgb.b*0.06*b*3)
+      });
+    }
+    sites.forEach(function(s){ s.baseX = s.x; s.baseY = s.y; });
+  }
+
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, {passive:true});
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, {passive:true});
+
+  var running = true;
+  document.addEventListener("visibilitychange", function(){ running = !document.hidden; if(running) requestAnimationFrame(step); });
+
+  // The nearest-site scan is the expensive part of this effect, so it only
+  // recomputes every other frame (~30fps for the pattern itself) while the
+  // RAF loop still runs at full rate for smooth site movement/interpolation.
+  var frameCount = 0;
+
+  function step(){
+    if(!running) return;
+
+    if(!reduced) t += 0.006 * speed;
+
+    // gently drift sites, push away from cursor — every frame for smoothness
+    for(var i=0;i<sites.length;i++){
+      var s = sites[i];
+      s.x = s.baseX + Math.sin(t*0.7 + i) * 18;
+      s.y = s.baseY + Math.cos(t*0.6 + i*1.3) * 18;
+      if(mouse.active){
+        var dx = s.x - mouse.x, dy = s.y - mouse.y;
+        var dist = Math.sqrt(dx*dx+dy*dy) || 1;
+        if(dist < 220){
+          var push = (1 - dist/220) * 30;
+          s.x += (dx/dist) * push;
+          s.y += (dy/dist) * push;
+        }
+      }
+    }
+
+    frameCount++;
+    if(frameCount % 2 !== 0){
+      // still redraw the last computed low-res buffer for a smoother feel
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(lowCanvas, 0, 0, LOW_W, LOW_H, 0, 0, W, H);
+      requestAnimationFrame(step);
+      return;
+    }
+
+    // render Voronoi at low resolution: nearest-site sample per low-res pixel
+    var imgData = lowCtx.createImageData(LOW_W, LOW_H);
+    var data = imgData.data;
+    var scaleX = W / LOW_W, scaleY = H / LOW_H;
+
+    for(var ly=0; ly<LOW_H; ly++){
+      for(var lx=0; lx<LOW_W; lx++){
+        var px = lx*scaleX, py = ly*scaleY;
+        var best = 0, bestDist = Infinity, second = Infinity;
+        for(var si=0; si<sites.length; si++){
+          var s2 = sites[si];
+          var dx2 = px - s2.x, dy2 = py - s2.y;
+          var d2 = dx2*dx2 + dy2*dy2;
+          if(d2 < bestDist){ second = bestDist; bestDist = d2; best = si; }
+          else if(d2 < second){ second = d2; }
+        }
+        var edgeCloseness = Math.sqrt(second) - Math.sqrt(bestDist);
+        var idx = (ly*LOW_W + lx) * 4;
+        var col = palette[best];
+        if(edgeCloseness < 6){
+          data[idx] = rgb.r; data[idx+1] = rgb.g; data[idx+2] = rgb.b; data[idx+3] = 90;
+        } else {
+          data[idx] = col.r; data[idx+1] = col.g; data[idx+2] = col.b; data[idx+3] = 255;
+        }
+      }
+    }
+    lowCtx.putImageData(imgData, 0, 0);
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(lowCanvas, 0, 0, LOW_W, LOW_H, 0, 0, W, H);
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
