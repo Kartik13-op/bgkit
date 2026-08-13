@@ -31,6 +31,12 @@ Every background is customizable through URL query params (colors, speed, densit
 | `liquid-blob.html` | Liquid Blob | gooey SVG-filter blobs displaced by the cursor |
 | `starfield-warp.html` | Starfield Warp | 3D starfield, hold click/tap to warp to lightspeed |
 | `ribbon-flow.html` | Ribbon Flow | silk ribbons of light undulating across the screen |
+| `gradient-orbit.html` | Gradient Orbit | luminous gradient planets orbiting through a cinematic radial field |
+| `chromatic-tide.html` | Chromatic Tide | layered gradient bands rolling like a slow ocean tide |
+| `mesh-prism.html` | Mesh Prism | translucent glass refracting a living mesh of color |
+| `quiet-grid.html` | Quiet Grid | restrained paper-like grid with a drifting glow |
+| `soft-noise.html` | Soft Noise | calm grainy color wash like light through frosted glass |
+| `line-breath.html` | Line Breath | fine horizontal lines expanding in a quiet rhythm |
 
 ## Adding a new background
 

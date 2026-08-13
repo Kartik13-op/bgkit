@@ -517,19 +517,34 @@
   @media (prefers-reduced-motion: reduce){
     .card{ transition:none; opacity:1; transform:none; }
   }
+
+  /* Full-bleed visual system */
+  :root{--bg:#08090e;--surface:#11131b;--surface-hover:#171a25;--line:rgba(255,255,255,.12);--ink:#f7f8fb;--muted:#9ba1b2;--black:#f7f8fb;--radius-lg:24px;--radius-md:16px}
+  body{background:#08090e;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+  body:before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at 10% 0%,rgba(124,92,255,.18),transparent 31%),radial-gradient(circle at 86% 16%,rgba(20,210,197,.12),transparent 27%),#08090e}
+  header{max-width:none;margin:0;padding:clamp(1.25rem,3vw,2.5rem) clamp(1.25rem,4vw,5rem) clamp(3.5rem,9vw,8rem);text-align:left;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+  header:after{content:"";position:absolute;width:42vw;height:42vw;right:-8vw;top:-24vw;border-radius:50%;background:radial-gradient(circle,rgba(255,77,157,.35),transparent 68%);filter:blur(20px);pointer-events:none}
+  .eyebrow{position:relative;z-index:1;display:flex;align-items:center;gap:.6rem;color:#d6d9e4;margin:0 0 clamp(4rem,12vh,10rem);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase}.eyebrow:before{content:"";width:8px;height:8px;border-radius:50%;background:#18d6c5;box-shadow:0 0 18px #18d6c5}
+  h1{position:relative;z-index:1;font-size:clamp(3.5rem,10vw,10rem);max-width:10ch;line-height:.88;letter-spacing:-.075em;margin:0 0 1.8rem;font-weight:700}.lede{position:relative;z-index:1;margin:0 0 2.3rem;max-width:54ch;color:#abb1c1;font-size:clamp(1rem,1.5vw,1.2rem);line-height:1.55}.lede code{color:#e9ebf2;background:rgba(255,255,255,.08)}.header-cta{position:relative;z-index:1;justify-content:flex-start}.btn{border-color:var(--line);background:rgba(255,255,255,.06);color:var(--ink)}.btn.primary{background:var(--ink);color:#08090e;border-color:var(--ink)}.btn:hover{border-color:rgba(255,255,255,.38);background:rgba(255,255,255,.12)}.btn.primary:hover{background:#fff}
+  .toolbar{background:rgba(8,9,14,.76);border-bottom:1px solid var(--line);top:0}.toolbar-inner{max-width:none;margin:0;padding:.85rem clamp(1.25rem,4vw,5rem);justify-content:flex-start;align-items:center;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.toolbar-inner::-webkit-scrollbar{display:none}.toolbar-label{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#687082;white-space:nowrap;padding-right:.35rem;border-right:1px solid var(--line);margin-right:.15rem}.tag-btn{background:transparent;border-color:var(--line);color:#9ba1b2;white-space:nowrap}.tag-btn:hover{color:#fff;border-color:rgba(255,255,255,.35)}.tag-btn.active{background:#fff;border-color:#fff;color:#08090e}
+  .status-strip{max-width:none;padding:.7rem clamp(1.25rem,4vw,5rem) 0;justify-content:flex-start}.status-strip .dot{background:#f0a64a}
+  main{max-width:none;margin:0;padding:clamp(2rem,5vw,5rem) clamp(1.25rem,4vw,5rem) clamp(5rem,10vw,10rem);grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:1.25rem}
+  .card{background:rgba(17,19,27,.9);border:1px solid var(--line);box-shadow:0 18px 55px rgba(0,0,0,.16)}.card:hover{box-shadow:0 28px 70px rgba(0,0,0,.35);border-color:rgba(255,255,255,.28)}.card-preview{aspect-ratio:16/10}.card-info{padding:1.15rem 1.25rem 1.35rem}.card-title{font-size:1.12rem}.card-tags .chip{background:rgba(255,255,255,.08);color:#b9bfcd}.card-expand-icon{background:rgba(255,255,255,.1)}.card-expand-icon svg{stroke:#fff}.card:hover .card-expand-icon{background:#fff}.card:hover .card-expand-icon svg{stroke:#08090e}
+  footer{max-width:none;padding:2.5rem clamp(1.25rem,4vw,5rem) 4rem;border-color:var(--line);color:#858b9b}footer a{color:#e9ebf2}.detail{max-width:1500px;background:#10121a;color:var(--ink)}.detail-body{background:#10121a}.field{background:rgba(255,255,255,.06)}.field input[type=text]{background:#0b0d13;border-color:var(--line);color:#fff}.field .val,.detail-desc,.section-label{color:#aab0c0}.urlbar{background:rgba(255,255,255,.05);border-color:var(--line)}.urlbar input{color:#dfe3ed}.code-toggle pre{background:#0b0d13;color:#d8dce7}.code-toggle summary{color:#aab0c0}
+  @media(min-width:1500px){main{grid-template-columns:repeat(4,minmax(0,1fr))}.card-preview{aspect-ratio:1.45}}@media(max-width:640px){header{padding-bottom:4rem}.eyebrow{margin-bottom:5rem}h1{font-size:clamp(3.2rem,17vw,6rem)}main{padding-top:2rem}.card-preview{aspect-ratio:1.2}}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="eyebrow">bgkit</div>
-  <h1>Backgrounds you embed, not install.</h1>
+  <div class="eyebrow">bgkit / open background library</div>
+  <h1>Make your page move.</h1>
   <p class="lede">
     Standalone HTML files, each a complete animated background.
     Drop an <code>&lt;iframe&gt;</code> behind your content — no build step, no dependencies.
   </p>
   <div class="header-cta">
-    <a class="btn primary" href="#gallery">Browse the gallery</a>
+    <a class="btn primary" href="#gallery">Explore backgrounds <span aria-hidden="true">↓</span></a>
     <a class="btn" href="https://github.com/Kartik13-op/bgkit" target="_blank" rel="noopener">View on GitHub</a>
   </div>
 </header>
@@ -1006,6 +1021,73 @@ const BACKGROUNDS = [
       { key:"text", label:"Hero text", type:"text", default:"" },
       { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
     ] }
+  ,{ slug:"gradient-orbit", file:"gradient-orbit.html", name:"Gradient Orbit",
+    desc:"Three luminous gradient planets orbit through a deep radial field with a slow, cinematic tilt.",
+    tags:["gradient","ambient","interactive","cinematic"], tint:"#111331",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#7C5CFF" },
+      { key:"color2", label:"Color 2", type:"color", default:"#16C7FF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#FF4D9D" },
+      { key:"bg", label:"Background", type:"color", default:"#080912" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"chromatic-tide", file:"chromatic-tide.html", name:"Chromatic Tide",
+    desc:"Layered color bands roll like a slow ocean tide beneath a soft luminous horizon.",
+    tags:["gradient","waves","ambient","minimal"], tint:"#11152E",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF4D9D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#7C5CFF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#18D6C5" },
+      { key:"bg", label:"Background", type:"color", default:"#080B18" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"mesh-prism", file:"mesh-prism.html", name:"Mesh Prism",
+    desc:"A translucent glass prism refracts a living mesh of color into a polished, editorial light field.",
+    tags:["gradient","mesh","glass","interactive"], tint:"#15102D",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#FF4D8D" },
+      { key:"color2", label:"Color 2", type:"color", default:"#7C5CFF" },
+      { key:"color3", label:"Color 3", type:"color", default:"#1DE4C5" },
+      { key:"bg", label:"Background", type:"color", default:"#08080D" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#FFFFFF" }
+    ] },
+  { slug:"quiet-grid", file:"quiet-grid.html", name:"Quiet Grid",
+    desc:"A restrained paper-like grid with a barely-there glow drifting across its lines.",
+    tags:["minimal","grid","ambient"], tint:"#F3F1EC",
+    params:[
+      { key:"color", label:"Accent", type:"color", default:"#A68B6A" },
+      { key:"bg", label:"Background", type:"color", default:"#F3F1EC" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#2F2B26" }
+    ] },
+  { slug:"soft-noise", file:"soft-noise.html", name:"Soft Noise",
+    desc:"A calm, grainy color wash that shifts almost imperceptibly like light through frosted glass.",
+    tags:["minimal","texture","ambient"], tint:"#E9E5DF",
+    params:[
+      { key:"color1", label:"Color 1", type:"color", default:"#D8C5B5" },
+      { key:"color2", label:"Color 2", type:"color", default:"#B8C4C1" },
+      { key:"bg", label:"Background", type:"color", default:"#E9E5DF" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#36332F" }
+    ] },
+  { slug:"line-breath", file:"line-breath.html", name:"Line Breath",
+    desc:"Fine horizontal lines expand and contract in a quiet monochrome rhythm.",
+    tags:["minimal","lines","ambient"], tint:"#101113",
+    params:[
+      { key:"color", label:"Accent", type:"color", default:"#C8BBA8" },
+      { key:"bg", label:"Background", type:"color", default:"#101113" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#F1F0EB" }
+    ] }
 ];
 
 /* =====================================================================
@@ -1033,19 +1115,32 @@ const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-wi
    TOOLBAR
    ===================================================================== */
 function renderToolbar(){
-  const allTags = Array.from(new Set(BACKGROUNDS.flatMap(b => b.tags))).sort();
   const toolbar = document.getElementById("toolbar");
+  const categories = [
+    { key:"", label:"Everything", note:"All backgrounds" },
+    { key:"gradient", label:"Gradients", note:"Color in motion", test:b => b.tags.includes("gradient") },
+    { key:"minimal", label:"Minimal", note:"Quiet + focused", test:b => b.tags.includes("minimal") || b.tags.includes("ambient") && !b.tags.includes("interactive") && !b.tags.includes("scifi") },
+    { key:"interactive", label:"Interactive", note:"Responds to you", test:b => b.tags.includes("interactive") },
+    { key:"pattern", label:"Patterns", note:"Grids, lines + cells", test:b => ["grid","lines","abstract","pattern","topographic"].some(t => b.tags.includes(t)) },
+    { key:"organic", label:"Organic", note:"Soft + natural", test:b => ["organic","nature","wellness","ambient","waves","petal"].some(t => b.tags.includes(t)) },
+    { key:"futuristic", label:"Futuristic", note:"Neon + sci-fi", test:b => ["scifi","neon","glitch","holographic","signal"].some(t => b.tags.includes(t)) }
+  ];
+  const categoryLabel = document.createElement("span");
+  categoryLabel.className = "toolbar-label";
+  categoryLabel.textContent = "Browse by mood";
+  toolbar.appendChild(categoryLabel);
   const allBtn = document.createElement("button");
   allBtn.className = "tag-btn active";
-  allBtn.textContent = "All";
+  allBtn.textContent = "Everything";
   allBtn.dataset.tag = "";
   toolbar.appendChild(allBtn);
 
-  allTags.forEach(tag => {
+  categories.slice(1).forEach(category => {
     const btn = document.createElement("button");
     btn.className = "tag-btn";
-    btn.textContent = tag;
-    btn.dataset.tag = tag;
+    btn.textContent = category.label;
+    btn.dataset.tag = category.key;
+    btn.title = category.note;
     toolbar.appendChild(btn);
   });
 
@@ -1054,11 +1149,12 @@ function renderToolbar(){
     if(!btn) return;
     toolbar.querySelectorAll(".tag-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    const tag = btn.dataset.tag;
-    document.querySelectorAll(".card").forEach(card => {
-      const tags = card.dataset.tags.split(",");
-      card.style.display = (!tag || tags.includes(tag)) ? "" : "none";
-    });
+    const category = categories.find(item => item.key === btn.dataset.tag);
+    categoryLabel.textContent = category && category.key ? category.note : "Browse by mood";
+      document.querySelectorAll(".card").forEach(card => {
+        card.style.display = (!category || !category.test || category.test(card._bg)) ? "" : "none";
+      });
+      if(window.syncVisibleCards) window.syncVisibleCards();
   });
 
   const toolbarWrap = document.getElementById("toolbarWrap");
@@ -1074,16 +1170,16 @@ function renderToolbar(){
    scroll). Every other iframe is either unloaded (src="") or paused.
    This is the fix for the multi-iframe lag.
    ===================================================================== */
-let activeCard = null; // currently playing card element
+const liveCards = new Set();
+const MAX_LIVE_PREVIEWS = matchMedia("(max-width: 700px)").matches ? 3 : 6;
+let viewportCards = [];
 
 function setActive(card){
-  if(activeCard === card) return;
-  if(activeCard) stopCard(activeCard);
-  activeCard = card;
-  if(card) startCard(card);
+  if(card) startCard(card); else liveCards.forEach(stopCard);
 }
 
 function startCard(card){
+  if(liveCards.has(card)) return;
   const preview = card.querySelector(".card-preview");
   const iframe = card.querySelector("iframe");
   const bg = card._bg;
@@ -1092,6 +1188,7 @@ function startCard(card){
     iframe.setAttribute("src", buildUrl(bg, card._defaultState));
   }
   preview.classList.add("playing");
+  liveCards.add(card);
 }
 
 function stopCard(card){
@@ -1101,6 +1198,18 @@ function stopCard(card){
   // fully unload to kill the animation loop & free GPU/CPU
   iframe.classList.remove("loaded");
   iframe.removeAttribute("src");
+  liveCards.delete(card);
+}
+
+function syncVisibleCards(){
+  const candidates = viewportCards.filter(card => card.style.display !== "none");
+  candidates.sort((a,b) => {
+    const ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+    return Math.abs(ar.top + ar.height / 2 - innerHeight / 2) - Math.abs(br.top + br.height / 2 - innerHeight / 2);
+  });
+  const keep = new Set(candidates.slice(0, MAX_LIVE_PREVIEWS));
+  liveCards.forEach(card => { if(!keep.has(card)) stopCard(card); });
+  keep.forEach(startCard);
 }
 
 function renderGallery(){
@@ -1123,7 +1232,7 @@ function renderGallery(){
       <div class="card-preview" style="--card-tint:${bg.tint || '#0B0C10'}">
         <iframe loading="lazy" title="${bg.name} preview"></iframe>
         <div class="card-poster">${PLAY_ICON}</div>
-        <div class="card-play-hint">Hover to preview</div>
+        <div class="card-play-hint">Live in viewport</div>
       </div>
       <div class="card-info">
         <div class="card-title-row">
@@ -1134,11 +1243,6 @@ function renderGallery(){
       </div>
     `;
 
-    card.addEventListener("pointerenter", () => setActive(card));
-    card.addEventListener("pointerleave", () => { if(activeCard === card) setActive(null); });
-    card.addEventListener("focus", () => setActive(card));
-    card.addEventListener("blur", () => { if(activeCard === card) setActive(null); });
-
     card.addEventListener("click", () => openDetail(bg));
     card.addEventListener("keydown", (e) => {
       if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetail(bg); }
@@ -1147,43 +1251,32 @@ function renderGallery(){
     gallery.appendChild(card);
   });
 
-  // scroll-reveal, staggered, respects reduced motion
   const cards = Array.from(document.querySelectorAll(".card"));
+  viewportCards = cards;
+
+  // Reveal cards as they enter, then run all visible previews together.
   if(window.matchMedia("(prefers-reduced-motion: reduce)").matches){
     cards.forEach(c => c.classList.add("revealed"));
   } else {
-    const io = new IntersectionObserver((entries) => {
+    const revealIo = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if(entry.isIntersecting){
           const idx = cards.indexOf(entry.target);
           setTimeout(() => entry.target.classList.add("revealed"), (idx % 3) * 70);
-          io.unobserve(entry.target);
+          revealIo.unobserve(entry.target);
         }
       });
     }, { threshold:0.15 });
-    cards.forEach(c => io.observe(c));
+    cards.forEach(c => revealIo.observe(c));
   }
 
-  // touch devices: no hover, so nearest-to-center card auto-plays while scrolling
-  if(matchMedia("(hover: none)").matches){
-    let ticking = false;
-    function pickNearestCenter(){
-      ticking = false;
-      const viewportCenter = window.innerHeight / 2;
-      let best = null, bestDist = Infinity;
-      cards.forEach(c => {
-        const r = c.getBoundingClientRect();
-        if(r.bottom < 0 || r.top > window.innerHeight) return;
-        const dist = Math.abs((r.top + r.bottom)/2 - viewportCenter);
-        if(dist < bestDist){ bestDist = dist; best = c; }
-      });
-      setActive(best);
-    }
-    window.addEventListener("scroll", () => {
-      if(!ticking){ ticking = true; requestAnimationFrame(pickNearestCenter); }
-    }, { passive:true });
-    pickNearestCenter();
-  }
+  const previewIo = new IntersectionObserver((entries) => {
+    entries.forEach(entry => entry.target.classList.toggle("in-view", entry.isIntersecting));
+    viewportCards = cards.filter(card => card.classList.contains("in-view"));
+    syncVisibleCards();
+  }, { rootMargin:"100px 0px", threshold:0.01 });
+  cards.forEach(c => previewIo.observe(c));
+  window.syncVisibleCards = syncVisibleCards;
 }
 
 /* =====================================================================
@@ -1282,6 +1375,7 @@ function openDetail(bg){
 function closeDetail(){
   overlay.classList.remove("open");
   document.body.style.overflow = "";
+  if(window.syncVisibleCards) window.syncVisibleCards();
   setTimeout(() => { detailEl.innerHTML = ""; }, 350);
 }
 
