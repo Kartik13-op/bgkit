@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="google-site-verification" content="g2dRe8ujBpZdFF8-NPwsUH-Nas1eIYwxX1fC8lFmgOQ" />
 <meta charset="UTF-8">
 <title>bgkit — embeddable HTML backgrounds</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1088,6 +1087,18 @@ const BACKGROUNDS = [
       { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
       { key:"text", label:"Hero text", type:"text", default:"" },
       { key:"textcolor", label:"Text color", type:"color", default:"#F1F0EB" }
+    ] },
+  { slug:"watercolor-wash", file:"watercolor-wash.html", name:"Watercolor Wash",
+    desc:"A grainy watercolor gradient slowly bleeds from paper white into layered sky blue and indigo.",
+    tags:["gradient","minimal","texture","watercolor","ambient"], tint:"#B8D7F7",
+    params:[
+      { key:"color1", label:"Sky blue", type:"color", default:"#6DB6F2" },
+      { key:"color2", label:"Indigo", type:"color", default:"#4338D8" },
+      { key:"bg", label:"Paper", type:"color", default:"#F8FAFC" },
+      { key:"speed", label:"Speed", type:"range", min:0.2, max:3, step:0.1, default:1 },
+      { key:"grain", label:"Grain", type:"range", min:0, max:1, step:0.05, default:0.65 },
+      { key:"text", label:"Hero text", type:"text", default:"" },
+      { key:"textcolor", label:"Text color", type:"color", default:"#243B6B" }
     ] }
 ];
 

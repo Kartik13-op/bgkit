@@ -37,6 +37,7 @@ Every background is customizable through URL query params (colors, speed, densit
 | `quiet-grid.html` | Quiet Grid | restrained paper-like grid with a drifting glow |
 | `soft-noise.html` | Soft Noise | calm grainy color wash like light through frosted glass |
 | `line-breath.html` | Line Breath | fine horizontal lines expanding in a quiet rhythm |
+| `watercolor-wash.html` | Watercolor Wash | grainy watercolor gradient bleeding from paper white into blue and indigo |
 
 ## Adding a new background
 
