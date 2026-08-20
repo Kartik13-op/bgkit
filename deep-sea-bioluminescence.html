@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!--
+  DEEP SEA BIOLUMINESCENCE — glowing jellyfish-like orbs pulse and drift in dark water
+  --------------------------------------------------------------------------------------
+  <iframe src="deep-sea-bioluminescence.html?color1=%2300FFB3&color2=%234D79FF&bg=%23010D18&speed=1&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, primary glow color      default #00FFB3
+    color2     hex, secondary glow color    default #4D79FF
+    bg         hex, background color        default #010D18
+    speed      float multiplier for motion  default 1
+    density    float, orb density           default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deep Sea Bioluminescence Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 0 40px rgba(0,255,179,0.4), 0 4px 30px rgba(0,0,0,0.8);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{
+    to{ opacity:1; transform:translateY(0); }
+    from{ opacity:0; transform:translateY(12px); }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){
+    return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback;
+  }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var c1hex = safeHex(getParam("color1", "#00FFB3"), "#00FFB3");
+  var c2hex = safeHex(getParam("color2", "#4D79FF"), "#4D79FF");
+  var bg = safeHex(getParam("bg", "#010D18"), "#010D18");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var density = parseFloat(getParam("density", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+
+  var c1 = hexToRgb(c1hex);
+  var c2 = hexToRgb(c2hex);
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H;
+  var mouse = { x: W/2, y: H/2, active: false };
+  var orbs = [];
+  var spores = [];
+  var t = 0;
+
+  function Orb(){
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.r = 20 + Math.random() * 60;
+    this.vx = (Math.random()-0.5) * 0.3 * speed;
+    this.vy = -0.15 * speed - Math.random() * 0.2 * speed;
+    this.phase = Math.random() * Math.PI * 2;
+    this.pulseSpeed = 0.3 + Math.random() * 0.5;
+    this.colorT = Math.random();
+    this.wobble = Math.random() * Math.PI * 2;
+    this.wobbleSpeed = (Math.random()-0.5) * 0.02;
+    this.tendrils = 3 + Math.floor(Math.random()*5);
+  }
+
+  Orb.prototype.update = function(){
+    this.wobble += this.wobbleSpeed * speed;
+    this.vx += Math.sin(this.wobble) * 0.02;
+    this.vx *= 0.99;
+
+    // float away from mouse
+    if(mouse.active){
+      var dx = this.x - mouse.x, dy = this.y - mouse.y;
+      var d = Math.sqrt(dx*dx + dy*dy);
+      if(d < 200){
+        var f = (200-d)/200 * 0.4;
+        this.vx += (dx/d)*f;
+        this.vy += (dy/d)*f;
+      }
+    }
+    this.vx *= 0.98; this.vy *= 0.98;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    if(this.x < -this.r*2) this.x = W + this.r;
+    if(this.x > W + this.r*2) this.x = -this.r;
+    if(this.y < -this.r*3){ this.y = H + this.r; this.x = Math.random()*W; }
+    if(this.y > H + this.r) this.y = -this.r;
+
+    // spawn tiny spores occasionally
+    if(Math.random() < 0.02){
+      spores.push({ x:this.x+(Math.random()-0.5)*this.r, y:this.y+(Math.random()-0.5)*this.r,
+                    vx:(Math.random()-0.5)*0.4, vy:-(Math.random()*0.5+0.1),
+                    life:1, colorT:this.colorT, r:2+Math.random()*3 });
+    }
+  };
+
+  Orb.prototype.draw = function(){
+    var pulse = 0.7 + 0.3 * Math.sin(t * this.pulseSpeed + this.phase);
+    var c = { r: c1.r + (c2.r-c1.r)*this.colorT, g: c1.g + (c2.g-c1.g)*this.colorT, b: c1.b + (c2.b-c1.b)*this.colorT };
+
+    // outer glow
+    var grd = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 2.5);
+    grd.addColorStop(0, "rgba(" + c.r + "," + c.g + "," + c.b + "," + (0.35*pulse) + ")");
+    grd.addColorStop(0.4, "rgba(" + c.r + "," + c.g + "," + c.b + "," + (0.12*pulse) + ")");
+    grd.addColorStop(1, "rgba(" + c.r + "," + c.g + "," + c.b + ",0)");
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 2.5, 0, Math.PI*2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    // bell body
+    var bell = ctx.createRadialGradient(this.x, this.y - this.r*0.2, this.r*0.1, this.x, this.y, this.r);
+    bell.addColorStop(0, "rgba(255,255,255," + (0.6*pulse) + ")");
+    bell.addColorStop(0.3, "rgba(" + c.r + "," + c.g + "," + c.b + "," + (0.5*pulse) + ")");
+    bell.addColorStop(1, "rgba(" + c.r + "," + c.g + "," + c.b + ",0)");
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.r, this.r * 0.7, 0, 0, Math.PI*2);
+    ctx.fillStyle = bell;
+    ctx.fill();
+
+    // tendrils
+    for(var td=0;td<this.tendrils;td++){
+      var tAngle = (Math.PI / (this.tendrils-1)) * td + Math.PI * 0.1;
+      var tLen = this.r * (0.8 + 0.6*Math.random());
+      ctx.beginPath();
+      ctx.moveTo(this.x + Math.cos(tAngle + this.wobble)*this.r*0.6, this.y + this.r*0.6);
+      ctx.bezierCurveTo(
+        this.x + Math.cos(tAngle + this.wobble)*this.r*0.8, this.y + this.r*0.6 + tLen*0.4,
+        this.x + Math.cos(tAngle*1.3 + this.wobble*1.5)*this.r*0.6, this.y + this.r*0.6 + tLen*0.7,
+        this.x + Math.cos(tAngle*0.8 + this.wobble*2)*this.r*0.4, this.y + this.r*0.6 + tLen
+      );
+      ctx.strokeStyle = "rgba(" + c.r + "," + c.g + "," + c.b + "," + (0.3*pulse) + ")";
+      ctx.lineWidth = 1 + Math.random();
+      ctx.stroke();
+    }
+  };
+
+  function resize(){
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    orbs = [];
+    var count = Math.floor(W * H / 45000 * density);
+    count = Math.max(4, Math.min(24, count));
+    for(var i=0;i<count;i++){
+      var o = new Orb();
+      o.y = Math.random() * H;
+      orbs.push(o);
+    }
+  }
+
+  function step(){
+    // deep underwater fade
+    ctx.fillStyle = bg;
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha = 1;
+
+    // depth caustics (subtle shimmer at top)
+    var caustic = ctx.createLinearGradient(0,0,0,H*0.3);
+    caustic.addColorStop(0, "rgba(" + c1.r + "," + c1.g + "," + c1.b + ",0.03)");
+    caustic.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = caustic;
+    ctx.fillRect(0,0,W,H*0.3);
+
+    // update & draw spores
+    for(var s=spores.length-1;s>=0;s--){
+      var sp = spores[s];
+      sp.x += sp.vx; sp.y += sp.vy; sp.life -= 0.015 * speed;
+      if(sp.life <= 0){ spores.splice(s,1); continue; }
+      var sc = { r: c1.r+(c2.r-c1.r)*sp.colorT, g: c1.g+(c2.g-c1.g)*sp.colorT, b: c1.b+(c2.b-c1.b)*sp.colorT };
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(" + sc.r + "," + sc.g + "," + sc.b + "," + (sp.life*0.8) + ")";
+      ctx.fill();
+    }
+
+    for(var i=0;i<orbs.length;i++){
+      orbs[i].update();
+      orbs[i].draw();
+    }
+
+    t += 0.025 * speed;
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize", resize, { passive:true });
+  window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, { passive:true });
+  window.addEventListener("mouseleave", function(){ mouse.active=false; });
+  window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, { passive:true });
+
+  resize();
+  step();
+})();
+</script>
+</body>
+</html>

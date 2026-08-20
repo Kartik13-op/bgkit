@@ -38,6 +38,7 @@ Every background is customizable through URL query params (colors, speed, densit
 | `soft-noise.html` | Soft Noise | calm grainy color wash like light through frosted glass |
 | `line-breath.html` | Line Breath | fine horizontal lines expanding in a quiet rhythm |
 | `watercolor-wash.html` | Watercolor Wash | grainy watercolor gradient bleeding from paper white into blue and indigo |
+| `dot-matrix-trail.html` | Dot Matrix Trail | off-white dots turn black near the cursor and fade back with a trail |
 
 ## Adding a new background
 

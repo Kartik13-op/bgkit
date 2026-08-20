@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<!--
+  @name: Dot Matrix Trail
+  @slug: dot-matrix-trail
+  @description: A field of off-white dots turns to ink-black around the cursor, leaving a delayed trail as the pointer moves.
+  @tags: minimal, interactive, pattern, dot-matrix
+
+  Query params: dot, ink, bg, size, radius, trail, speed, text, textcolor
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dot Matrix Trail</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#20211F}
+  .stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg)}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .wash{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.035),transparent 24%),radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.18));}
+  .hero{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--text);font:600 clamp(1.8rem,5vw,4rem)/1.05 system-ui,sans-serif;letter-spacing:-.045em;text-align:center;text-shadow:0 3px 25px rgba(0,0,0,.4)}
+  .hero span{opacity:0;animation:reveal 1.2s ease .2s forwards}
+  @keyframes reveal{to{opacity:1;transform:translateY(0)}from{opacity:0;transform:translateY(12px)}}
+  @media(prefers-reduced-motion:reduce){.hero span{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+<div class="stage" id="stage"><canvas id="matrix"></canvas><div class="wash"></div><div class="hero"><span id="heroText"></span></div></div>
+<script>
+(function(){
+  function getParam(name,fallback){var v=new URLSearchParams(location.search).get(name);return v===null||v===""?fallback:v}
+  function safeHex(v,fallback){return /^#([0-9a-f]{3}){1,2}$/i.test(v)?v:fallback}
+  function rgb(hex){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(function(c){return c+c}).join('');var n=parseInt(hex,16);return{r:n>>16&255,g:n>>8&255,b:n&255}}
+  function rgba(c,a){return'rgba('+c.r+','+c.g+','+c.b+','+a+')'}
+
+  var stage=document.getElementById('stage'),canvas=document.getElementById('matrix'),ctx=canvas.getContext('2d');
+  var dot=rgb(safeHex(getParam('dot','#F1EFE8'),'#F1EFE8')),ink=rgb(safeHex(getParam('ink','#171815'),'#171815'));
+  var bg=safeHex(getParam('bg','#20211F'),'#20211F'),size=Math.max(10,Math.min(90,parseFloat(getParam('size','27'))||27));
+  var radius=Math.max(20,Math.min(500,parseFloat(getParam('radius','135'))||135));
+  var trail=Math.max(0,Math.min(3000,parseFloat(getParam('trail','650'))||650));
+  var speed=Math.max(.1,parseFloat(getParam('speed','1'))||1),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.body.style.background=bg;stage.style.setProperty('--bg',bg);stage.style.setProperty('--text',safeHex(getParam('textcolor','#F1EFE8'),'#F1EFE8'));
+  var text=getParam('text','');if(text)document.getElementById('heroText').textContent=text;
+
+  var W=0,H=0,dpr=1,cols=0,rows=0,dots=[],mouse={x:-1000,y:-1000,active:false},last=0;
+  function makeDots(){
+    cols=Math.ceil(W/size)+2;rows=Math.ceil(H/size)+2;dots=[];
+    for(var y=0;y<rows;y++)for(var x=0;x<cols;x++)dots.push({x:x*size-size/2,y:y*size-size/2,ink:0,last:0,jitter:(Math.random()-.5)*.7});
+  }
+  function resize(){dpr=Math.min(devicePixelRatio||1,1.5);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);makeDots();draw(performance.now())}
+  function draw(now){
+    var dt=Math.min(50,now-(last||now));last=now;ctx.clearRect(0,0,W,H);ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    for(var i=0;i<dots.length;i++){
+      var p=dots[i],dx=p.x-mouse.x,dy=p.y-mouse.y,dist=Math.sqrt(dx*dx+dy*dy),near=mouse.active&&dist<radius;
+      if(near){p.ink=1;p.last=now}else if(p.ink>0&&now-p.last>trail){p.ink=Math.max(0,p.ink-dt*.0025*speed)}
+      var eased=p.ink*p.ink*(3-2*p.ink),c={r:dot.r+(ink.r-dot.r)*eased,g:dot.g+(ink.g-dot.g)*eased,b:dot.b+(ink.b-dot.b)*eased};
+      var wobble=1+p.jitter*.025,rr=Math.max(1.2,size*.16*wobble);
+      ctx.fillStyle=rgba(c,.97);ctx.beginPath();ctx.arc(p.x,p.y,rr,0,Math.PI*2);ctx.fill();
+    }
+    if(!reduced)requestAnimationFrame(draw);
+  }
+  addEventListener('resize',resize,{passive:true});
+  addEventListener('pointermove',function(e){mouse.x=e.clientX;mouse.y=e.clientY;mouse.active=true;stage.style.setProperty('--mx',e.clientX+'px');stage.style.setProperty('--my',e.clientY+'px')},{passive:true});
+  addEventListener('pointerleave',function(){mouse.active=false},{passive:true});
+  addEventListener('touchmove',function(e){if(e.touches[0]){mouse.x=e.touches[0].clientX;mouse.y=e.touches[0].clientY;mouse.active=true}},{passive:true});
+  resize();if(!reduced)requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

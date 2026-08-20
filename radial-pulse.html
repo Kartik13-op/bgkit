@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!--
+  RADIAL PULSE — concentric rings emanating from center, slow radar-like pulse
+  ------------------------------------------------------------------------------
+  @name: Radial Pulse
+  @slug: radial-pulse
+  @description: Concentric rings pulse outward from center — minimal, hypnotic, text stays clear.
+  @tags: minimal, lines, ambient
+
+  Query params:
+    color      hex, ring color              default #6366F1
+    bg         hex, background color        default #0C0C14
+    speed      float multiplier             default 1
+    text       optional hero text           default ""
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Radial Pulse Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem,5vw,4rem); font-weight:600; letter-spacing:-0.02em;
+    text-align:center; padding:0 1rem; text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0; animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(n,f){var v=new URLSearchParams(location.search).get(n);return v===null||v===""?f:v}
+  function safeHex(v,f){return/^#([0-9A-Fa-f]{3}){1,2}$/.test(v)?v:f}
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var n=parseInt(h,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+
+  var colorHex=safeHex(getParam("color","#6366F1"),"#6366F1");
+  var bg=safeHex(getParam("bg","#0C0C14"),"#0C0C14");
+  var speed=parseFloat(getParam("speed","1"))||1;
+  var text=getParam("text","");
+  var textColor=safeHex(getParam("textcolor","#FFFFFF"),"#FFFFFF");
+
+  var rgb=hexToRgb(colorHex);
+  document.body.style.background=bg;
+  document.getElementById("heroText").style.color=textColor;
+  if(text) document.getElementById("heroText").textContent=text;
+
+  var canvas=document.getElementById("c");
+  var ctx=canvas.getContext("2d");
+  var W,H;
+  var t=0;
+
+  function resize(){
+    W=canvas.width=window.innerWidth;
+    H=canvas.height=window.innerHeight;
+  }
+
+  function step(){
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,W,H);
+
+    var cx=W/2, cy=H/2;
+    var maxR=Math.sqrt(cx*cx+cy*cy)+100;
+    var ringSpacing=60;
+    var numRings=Math.ceil(maxR/ringSpacing)+4;
+
+    for(var i=0;i<numRings;i++){
+      var baseR=i*ringSpacing;
+      var animR=baseR+(t*80)%ringSpacing; // rings drift outward
+      if(animR>maxR) continue;
+
+      var fade=1-animR/maxR;
+      fade=fade*fade;
+      var alpha=fade*0.22;
+
+      ctx.beginPath();
+      ctx.arc(cx,cy,animR,0,Math.PI*2);
+      ctx.strokeStyle="rgba("+rgb.r+","+rgb.g+","+rgb.b+","+alpha+")";
+      ctx.lineWidth=1+fade*1.5;
+      ctx.stroke();
+    }
+
+    // center glow
+    var grd=ctx.createRadialGradient(cx,cy,0,cx,cy,200);
+    grd.addColorStop(0,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",0.08)");
+    grd.addColorStop(1,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",0)");
+    ctx.fillStyle=grd;
+    ctx.beginPath();
+    ctx.arc(cx,cy,200,0,Math.PI*2);
+    ctx.fill();
+
+    t+=0.008*speed;
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize",resize,{passive:true});
+  resize(); step();
+})();
+</script>
+</body>
+</html>

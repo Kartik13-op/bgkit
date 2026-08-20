@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--
+  WAVE LAYERS — stacked sine waves gently rolling like an ocean horizon
+  ----------------------------------------------------------------------
+  @name: Wave Layers
+  @slug: wave-layers
+  @description: Stacked translucent wave bands rolling gently — clean ocean-like backdrop.
+  @tags: waves, gradient, ambient
+
+  Query params:
+    color1     hex, front wave color        default #3B82F6
+    color2     hex, back wave color         default #1E3A5F
+    bg         hex, background (sky)        default #0A1628
+    speed      float multiplier             default 1
+    layers     int, wave count (3-10)       default 5
+    text       optional hero text           default ""
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wave Layers Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem,5vw,4rem); font-weight:600; letter-spacing:-0.02em;
+    text-align:center; padding:0 1rem; text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0; animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(n,f){var v=new URLSearchParams(location.search).get(n);return v===null||v===""?f:v}
+  function safeHex(v,f){return/^#([0-9A-Fa-f]{3}){1,2}$/.test(v)?v:f}
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var n=parseInt(h,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+
+  var c1hex=safeHex(getParam("color1","#3B82F6"),"#3B82F6");
+  var c2hex=safeHex(getParam("color2","#1E3A5F"),"#1E3A5F");
+  var bg=safeHex(getParam("bg","#0A1628"),"#0A1628");
+  var speed=parseFloat(getParam("speed","1"))||1;
+  var layers=Math.max(3,Math.min(10,parseInt(getParam("layers","5"))||5));
+  var text=getParam("text","");
+  var textColor=safeHex(getParam("textcolor","#FFFFFF"),"#FFFFFF");
+
+  var c1=hexToRgb(c1hex), c2=hexToRgb(c2hex);
+  document.body.style.background=bg;
+  document.getElementById("heroText").style.color=textColor;
+  if(text) document.getElementById("heroText").textContent=text;
+
+  var canvas=document.getElementById("c");
+  var ctx=canvas.getContext("2d");
+  var W,H;
+  var t=0;
+
+  function resize(){
+    W=canvas.width=window.innerWidth;
+    H=canvas.height=window.innerHeight;
+  }
+
+  function step(){
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,W,H);
+
+    for(var l=layers-1;l>=0;l--){
+      var tt=l/(layers-1);
+      var r=Math.round(c2.r+(c1.r-c2.r)*tt);
+      var g=Math.round(c2.g+(c1.g-c2.g)*tt);
+      var b=Math.round(c2.b+(c1.b-c2.b)*tt);
+      var alpha=0.15+tt*0.25;
+      var baseY=H*0.5+l*(H*0.06);
+      var amp=H*(0.03+tt*0.04);
+      var freq=0.003+l*0.0006;
+      var phaseShift=l*0.8;
+
+      ctx.beginPath();
+      ctx.moveTo(0,H);
+      for(var x=0;x<=W;x+=3){
+        var y=baseY
+          +Math.sin(x*freq+t*0.5+phaseShift)*amp
+          +Math.sin(x*freq*2.3-t*0.3+phaseShift*1.4)*amp*0.3;
+        ctx.lineTo(x,y);
+      }
+      ctx.lineTo(W,H);
+      ctx.closePath();
+      ctx.fillStyle="rgba("+r+","+g+","+b+","+alpha+")";
+      ctx.fill();
+    }
+
+    t+=0.015*speed;
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize",resize,{passive:true});
+  resize(); step();
+})();
+</script>
+</body>
+</html>

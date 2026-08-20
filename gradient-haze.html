@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+  GRADIENT HAZE — slow-moving layered gradient blobs, ultra-soft, great behind text
+  ----------------------------------------------------------------------------------
+  @name: Gradient Haze
+  @slug: gradient-haze
+  @description: Ultra-soft blurred gradient blobs that drift slowly — perfect behind hero sections.
+  @tags: gradient, ambient, minimal
+
+  Embed:
+    <iframe src="gradient-haze.html?color1=%237C5CFF&color2=%23FF4D9D&bg=%23080A12&speed=1"
+      style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;"
+      loading="lazy"></iframe>
+
+  Query params:
+    color1     hex, blob color 1            default #7C5CFF
+    color2     hex, blob color 2            default #FF4D9D
+    color3     hex, blob color 3            default #18D6C5
+    bg         hex, background color        default #080A12
+    speed      float multiplier for motion  default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gradient Haze Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --c1:#7C5CFF; --c2:#FF4D9D; --c3:#18D6C5; --bg:#080A12; --text-color:#FFFFFF;
+  }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;
+  }
+  .stage{ position:relative; width:100%; height:100%; background:var(--bg); }
+  .blob{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(100px);
+    opacity:0.45;
+    mix-blend-mode:screen;
+    will-change:transform;
+  }
+  .b1{ background:var(--c1); width:55vmax; height:55vmax; top:-10%; left:-5%; animation:d1 var(--dur1) ease-in-out infinite; }
+  .b2{ background:var(--c2); width:50vmax; height:50vmax; bottom:-15%; right:-8%; animation:d2 var(--dur2) ease-in-out infinite; }
+  .b3{ background:var(--c3); width:40vmax; height:40vmax; top:30%; left:40%; animation:d3 var(--dur3) ease-in-out infinite; }
+
+  @keyframes d1{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(12vw,8vh) scale(1.08); }
+  }
+  @keyframes d2{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(-10vw,-12vh) scale(1.12); }
+  }
+  @keyframes d3{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    33%{ transform:translate(-8vw,6vh) scale(0.92); }
+    66%{ transform:translate(6vw,-8vh) scale(1.06); }
+  }
+
+  .veil{
+    position:absolute; inset:0;
+    background:radial-gradient(ellipse at 50% 50%, transparent 0%, var(--bg) 80%);
+    pointer-events:none;
+  }
+
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .hero span{
+    color:var(--text-color);
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600; letter-spacing:-0.02em; text-align:center; padding:0 1rem;
+    text-shadow:0 4px 40px rgba(0,0,0,0.35);
+    opacity:0; animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  @media(prefers-reduced-motion:reduce){ .blob{animation:none!important;} }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="veil"></div>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(n,f){var v=new URLSearchParams(location.search).get(n);return v===null||v===""?f:v}
+  function safeHex(v,f){return/^#([0-9A-Fa-f]{3}){1,2}$/.test(v)?v:f}
+
+  var c1=safeHex(getParam("color1","#7C5CFF"),"#7C5CFF");
+  var c2=safeHex(getParam("color2","#FF4D9D"),"#FF4D9D");
+  var c3=safeHex(getParam("color3","#18D6C5"),"#18D6C5");
+  var bg=safeHex(getParam("bg","#080A12"),"#080A12");
+  var speed=parseFloat(getParam("speed","1"))||1;
+  var text=getParam("text","");
+  var textColor=safeHex(getParam("textcolor","#FFFFFF"),"#FFFFFF");
+
+  var r=document.documentElement.style;
+  r.setProperty("--c1",c1); r.setProperty("--c2",c2); r.setProperty("--c3",c3);
+  r.setProperty("--bg",bg); r.setProperty("--text-color",textColor);
+  r.setProperty("--dur1",(24/speed)+"s");
+  r.setProperty("--dur2",(28/speed)+"s");
+  r.setProperty("--dur3",(20/speed)+"s");
+
+  if(text) document.getElementById("heroText").textContent=text;
+})();
+</script>
+</body>
+</html>

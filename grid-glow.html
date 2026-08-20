@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<!--
+  GRID GLOW — subtle animated grid lines with a soft moving spotlight
+  ---------------------------------------------------------------------
+  @name: Grid Glow
+  @slug: grid-glow
+  @description: Clean grid pattern with a soft spotlight that follows the cursor — techy, SaaS-ready.
+  @tags: grid, interactive, minimal
+
+  Query params:
+    color      hex, grid/glow color         default #3B82F6
+    bg         hex, background color        default #0A0E18
+    size       int, grid cell px            default 40
+    speed      float multiplier             default 1
+    text       optional hero text           default ""
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Grid Glow Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem,5vw,4rem); font-weight:600; letter-spacing:-0.02em;
+    text-align:center; padding:0 1rem; text-shadow:0 4px 30px rgba(0,0,0,0.5);
+    opacity:0; animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{ from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(n,f){var v=new URLSearchParams(location.search).get(n);return v===null||v===""?f:v}
+  function safeHex(v,f){return/^#([0-9A-Fa-f]{3}){1,2}$/.test(v)?v:f}
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var n=parseInt(h,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+
+  var colorHex=safeHex(getParam("color","#3B82F6"),"#3B82F6");
+  var bg=safeHex(getParam("bg","#0A0E18"),"#0A0E18");
+  var cellSize=Math.max(16,Math.min(100,parseInt(getParam("size","40"))||40));
+  var speed=parseFloat(getParam("speed","1"))||1;
+  var text=getParam("text","");
+  var textColor=safeHex(getParam("textcolor","#FFFFFF"),"#FFFFFF");
+
+  var rgb=hexToRgb(colorHex);
+  document.body.style.background=bg;
+  document.getElementById("heroText").style.color=textColor;
+  if(text) document.getElementById("heroText").textContent=text;
+
+  var canvas=document.getElementById("c");
+  var ctx=canvas.getContext("2d");
+  var W,H;
+  var mouse={x:-1000,y:-1000,active:false};
+  var spotlight={x:-1000,y:-1000}; // smoothed
+  var t=0;
+
+  function resize(){
+    W=canvas.width=window.innerWidth;
+    H=canvas.height=window.innerHeight;
+    spotlight.x=W/2; spotlight.y=H/2;
+  }
+
+  function step(){
+    // smooth spotlight follow
+    if(mouse.active){
+      spotlight.x+=(mouse.x-spotlight.x)*0.06;
+      spotlight.y+=(mouse.y-spotlight.y)*0.06;
+    } else {
+      // idle: slow orbit
+      spotlight.x=W/2+Math.sin(t*0.4)*W*0.25;
+      spotlight.y=H/2+Math.cos(t*0.3)*H*0.2;
+    }
+
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,W,H);
+
+    // draw grid
+    for(var x=0;x<=W;x+=cellSize){
+      for(var y=0;y<=H;y+=cellSize){
+        var dx=x-spotlight.x, dy=y-spotlight.y;
+        var d=Math.sqrt(dx*dx+dy*dy);
+        var radius=350;
+        var intensity=Math.max(0,1-d/radius);
+        intensity=intensity*intensity; // quadratic falloff
+
+        if(intensity>0.01){
+          // horizontal line segment
+          ctx.strokeStyle="rgba("+rgb.r+","+rgb.g+","+rgb.b+","+(0.08+intensity*0.5)+")";
+          ctx.lineWidth=0.5+intensity*1;
+          ctx.beginPath();
+          ctx.moveTo(x,y);
+          ctx.lineTo(Math.min(x+cellSize,W),y);
+          ctx.stroke();
+          // vertical
+          ctx.beginPath();
+          ctx.moveTo(x,y);
+          ctx.lineTo(x,Math.min(y+cellSize,H));
+          ctx.stroke();
+
+          // intersection dot
+          if(intensity>0.15){
+            ctx.beginPath();
+            ctx.arc(x,y,1+intensity*2,0,Math.PI*2);
+            ctx.fillStyle="rgba("+rgb.r+","+rgb.g+","+rgb.b+","+(intensity*0.8)+")";
+            ctx.fill();
+          }
+        } else {
+          // faint base grid
+          ctx.strokeStyle="rgba("+rgb.r+","+rgb.g+","+rgb.b+",0.04)";
+          ctx.lineWidth=0.5;
+          ctx.beginPath();
+          ctx.moveTo(x,y); ctx.lineTo(Math.min(x+cellSize,W),y);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x,y); ctx.lineTo(x,Math.min(y+cellSize,H));
+          ctx.stroke();
+        }
+      }
+    }
+
+    // soft center glow
+    var grd=ctx.createRadialGradient(spotlight.x,spotlight.y,0,spotlight.x,spotlight.y,300);
+    grd.addColorStop(0,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",0.06)");
+    grd.addColorStop(1,"rgba("+rgb.r+","+rgb.g+","+rgb.b+",0)");
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,W,H);
+
+    t+=0.015*speed;
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("resize",resize,{passive:true});
+  window.addEventListener("mousemove",function(e){mouse.x=e.clientX;mouse.y=e.clientY;mouse.active=true},{passive:true});
+  window.addEventListener("mouseleave",function(){mouse.active=false});
+  window.addEventListener("touchmove",function(e){if(e.touches[0]){mouse.x=e.touches[0].clientX;mouse.y=e.touches[0].clientY;mouse.active=true;}},{passive:true});
+
+  resize(); step();
+})();
+</script>
+</body>
+</html>

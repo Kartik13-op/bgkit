@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<!--
+  PLASMA LIGHTNING — electric arcs that branch and crackle across the screen
+  --------------------------------------------------------------------------
+  <iframe src="plasma-lightning.html?color=%2300CFFF&bg=%23050814&speed=1&text=Hello"
+    style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:-1;" loading="lazy"></iframe>
+
+  Query params:
+    color      hex, lightning color         default #00CFFF
+    bg         hex, background color        default #050814
+    speed      float multiplier for motion  default 1
+    density    float, branch density        default 1
+    text       optional hero text overlay   default "" (none)
+    textcolor  hex, hero text color         default #FFFFFF
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Plasma Lightning Background</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; }
+  .stage{ position:relative; width:100%; height:100%; }
+  canvas{ position:absolute; inset:0; display:block; }
+  .hero{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .hero span{
+    font-size:clamp(1.8rem, 5vw, 4rem);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    text-align:center;
+    padding:0 1rem;
+    text-shadow:0 4px 30px rgba(0,0,0,0.6);
+    opacity:0;
+    animation:reveal 1.4s ease forwards 0.3s;
+  }
+  @keyframes reveal{
+    to{ opacity:1; transform:translateY(0); }
+    from{ opacity:0; transform:translateY(12px); }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="hero"><span id="heroText"></span></div>
+</div>
+
+<script>
+(function(){
+  function getParam(name, fallback){
+    var v = new URLSearchParams(window.location.search).get(name);
+    return (v === null || v === "") ? fallback : v;
+  }
+  function safeHex(v, fallback){
+    return /^#([0-9A-Fa-f]{3}){1,2}$/.test(v) ? v : fallback;
+  }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  var color = safeHex(getParam("color", "#00CFFF"), "#00CFFF");
+  var bg = safeHex(getParam("bg", "#050814"), "#050814");
+  var speed = parseFloat(getParam("speed", "1")) || 1;
+  var density = parseFloat(getParam("density", "1")) || 1;
+  var text = getParam("text", "");
+  var textColor = safeHex(getParam("textcolor", "#FFFFFF"), "#FFFFFF");
+
+  document.body.style.background = bg;
+  document.getElementById("heroText").style.color = textColor;
+  if(text){ document.getElementById("heroText").textContent = text; }
+
+  var rgb = hexToRgb(color);
+  var rgbStr = rgb.r + "," + rgb.g + "," + rgb.b;
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var W, H;
+  var mouse = { x: -1000, y: -1000, active: false };
+  var bolts = [];
+  var t = 0;
+
+  function Bolt(sx, sy, ex, ey, life, alpha){
+    this.sx = sx; this.sy = sy;
+    this.ex = ex; this.ey = ey;
+    this.life = life || 1;
+    this.maxLife = this.life;
+    this.alpha = alpha || 1;
+    this.segments = buildSegments(sx, sy, ex, ey, 4);
+    this.children = [];
+    var self = this;
+    if(Math.random() < 0.55 && this.life > 0.3){
+      var midIdx = Math.floor(this.segments.length / 2);
+      var mx = this.segments[midIdx].x;
+      var my = this.segments[midIdx].y;
+      var angle = Math.atan2(ey - sy, ex - sx) + (Math.random()-0.5)*1.4;
+      var len = Math.sqrt((ex-sx)*(ex-sx)+(ey-sy)*(ey-sy)) * 0.5;
+      this.children.push(new Bolt(mx, my, mx + Math.cos(angle)*len, my + Math.sin(angle)*len, this.life * 0.6, this.alpha * 0.6));
+    }
+  }
+
+  function buildSegments(sx, sy, ex, ey, depth){
+    if(depth === 0) return [{x:sx,y:sy},{x:ex,y:ey}];
+    var mx = (sx+ex)/2 + (Math.random()-0.5) * Math.sqrt((ex-sx)*(ex-sx)+(ey-sy)*(ey-sy)) * 0.55;
+    var my = (sy+ey)/2 + (Math.random()-0.5) * Math.sqrt((ex-sx)*(ex-sx)+(ey-sy)*(ey-sy)) * 0.55;
+    return buildSegments(sx,sy,mx,my,depth-1).concat(buildSegments(mx,my,ex,ey,depth-1).slice(1));
+  }
+
+  function drawBolt(bolt, fade){
+    if(bolt.segments.length < 2) return;
+    var a = bolt.alpha * fade;
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = "rgba(" + rgbStr + "," + a + ")";
+    ctx.strokeStyle = "rgba(" + rgbStr + "," + a + ")";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
+    for(var i=1;i<bolt.segments.length;i++){
+      ctx.lineTo(bolt.segments[i].x, bolt.segments[i].y);
+    }
+    ctx.stroke();
+    // bright core
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = "rgba(255,255,255," + (a*0.7) + ")";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
+    for(var j=1;j<bolt.segments.length;j++){
+      ctx.lineTo(bolt.segments[j].x, bolt.segments[j].y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    for(var k=0;k<bolt.children.length;k++){
+      drawBolt(bolt.children[k], fade);
+    }
+  }
+
+  function spawnBolt(){
+    var edge = Math.floor(Math.random()*4);
+    var sx,sy,ex,ey;
+    if(edge===0){ sx=Math.random()*W; sy=0; }
+    else if(edge===1){ sx=W; sy=Math.random()*H; }
+    else if(edge===2){ sx=Math.random()*W; sy=H; }
+    else { sx=0; sy=Math.random()*H; }
+    if(mouse.active && Math.random()<0.4){
+      ex = mouse.x + (Math.random()-0.5)*120;
+      ey = mouse.y + (Math.random()-0.5)*120;
+    } else {
+      ex = Math.random()*W;
+      ey = Math.random()*H;
+    }
+    bolts.push(new Bolt(sx, sy, ex, ey, 0.7 + Math.random()*0.6));
+  }
+
+  var spawnTimer = 0;
+  function resize(){
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    bolts = [];
+  }
+
+  function step(){
+    ctx.fillStyle = bg;
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha = 1;
+
+    spawnTimer += speed;
+    var rate = Math.max(1, 4 / density);
+    if(spawnTimer > rate){
+      spawnTimer = 0;
+      var num = Math.floor(density * 1.5);
+      for(var n=0;n<num;n++) spawnBolt();
+    }
+
+    for(var i=bolts.length-1;i>=0;i--){
+      bolts[i].life -= 0.025 * speed;
+      var fade = bolts[i].life / bolts[i].maxLife;
+      if(bolts[i].life <= 0){ bolts.splice(i,1); continue; }
+      drawBolt(bolts[i], fade);
+    }
+    t++;
+    requestAnimationFrame(step);
+  }
+
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+  } else {
+    window.addEventListener("resize", resize, { passive:true });
+    window.addEventListener("mousemove", function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; }, { passive:true });
+    window.addEventListener("mouseleave", function(){ mouse.active=false; });
+    window.addEventListener("touchmove", function(e){ if(e.touches[0]){ mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.active=true; } }, { passive:true });
+    resize();
+    step();
+  }
+})();
+</script>
+</body>
+</html>
